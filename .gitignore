@@ -1,0 +1,33 @@
+# --- Python / backend ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+backend/.env
+backend/alembic/versions/__pycache__/
+
+# --- Node / frontend ---
+node_modules/
+frontend/.next/
+frontend/out/
+frontend/.env
+frontend/.env.local
+*.tsbuildinfo
+
+# --- Env / secrets ---
+.env
+.env.*
+!.env.example
+!*/.env.example
+
+# --- OS / editor ---
+.DS_Store
+.vscode/
+.idea/
+
+# --- Docker ---
+*.pid
