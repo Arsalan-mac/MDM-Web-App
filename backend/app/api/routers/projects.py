@@ -6,6 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_tenant_db
+from app.cleansing.pipeline import set_stage_status
 from app.models.tenant import Project, Stage
 
 router = APIRouter(prefix="/projects", tags=["projects"])
@@ -82,21 +83,7 @@ async def update_stage_status(
     Mirrors the original app's locking rule (2202MandantenCleansing.py):
     a stage only becomes reachable once every stage before it is done.
     """
-    result = await db.execute(
-        select(Stage).where(Stage.project_id == project_id).order_by(Stage.position)
-    )
-    stages = list(result.scalars().all())
-    target = next((s for s in stages if s.key == stage_key), None)
-    if target is None:
-        raise ValueError(f"Unknown stage '{stage_key}' for this project.")
-
-    target.status = payload.status
-
-    if payload.status == "done":
-        next_stage = next((s for s in stages if s.position == target.position + 1), None)
-        if next_stage is not None and next_stage.status == "locked":
-            next_stage.status = "in_progress"
-
+    target = await set_stage_status(db, project_id, stage_key, payload.status)
     await db.commit()
     await db.refresh(target)
     return target

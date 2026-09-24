@@ -13,10 +13,15 @@ Claude-powered "talk to your data" agent.
 - 1b. Multi-tenancy core: `Tenant` model (mapped to a Clerk Organization),
   schema-per-tenant provisioning, `Project`/`Stage` model encoding the fixed
   pipeline and its locking rules.
-- 1c. First pipeline slice ported end-to-end: **Load Data** →
-  **Address Cleansing** (reference data, Adress-Analyse, Nacharbeit,
-  Zerlegung, `JUNK_ADDRESS`, DB-split/"infiziert" quarantine) as API +
-  background jobs + frontend screens.
+- 1c. First pipeline slice ported end-to-end: **Load Data** (done - Mandanten
+  Initial Load: parse/standardize/clean, full-replace into the tenant's
+  `mandanten` table, marks the stage done) → **Address Cleansing** (next up:
+  reference data, Adress-Analyse, Nacharbeit, Zerlegung, `JUNK_ADDRESS`,
+  DB-split/"infiziert" quarantine) as API + background jobs + frontend
+  screens. Delta Upload and the other reference tables the original app
+  loads (Auftraege, Rollen, Klammertabelle, Verbundene_Parteien, Branchen,
+  Mandant_Gegner, Lieferanten, UserCode) are deferred to Phase 2, ported
+  alongside the stages that actually consume them.
 - 1d. Chat-with-data agent v1: Claude API tool use, a handful of curated
   read-only tools scoped to one tenant+project, chat panel in the UI.
 

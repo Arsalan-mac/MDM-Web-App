@@ -7,7 +7,8 @@ resolved per request.
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, UniqueConstraint, func
+from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, func
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import TenantBase
@@ -69,3 +70,45 @@ class Stage(TenantBase):
     status: Mapped[str] = mapped_column(String(16), default="locked")  # locked | in_progress | done
 
     project: Mapped["Project"] = relationship(back_populates="stages")
+
+
+class Mandant(TenantBase):
+    """The client master-data table ('Mandanten' in the original app).
+
+    Field names intentionally keep the original CamelCase business names
+    (IDParty, CompanyName, ...) rather than snake_case: they are external
+    data field names shared with the rest of the still-to-be-ported domain
+    logic (address/tax/register cleansing, SAP export mapping), not Python
+    identifiers we control - see mdm_shared.py in the original app and
+    app/cleansing/constants.py here.
+
+    Only the standardized columns the ported pipeline stages actually read
+    get their own column; every other column present in an uploaded file is
+    preserved verbatim in `extra` so no source data is silently dropped.
+    """
+
+    __tablename__ = "mandanten"
+
+    IDParty: Mapped[str] = mapped_column(String(64), primary_key=True)
+    CompanyName: Mapped[str | None] = mapped_column(Text)
+    CountryCode: Mapped[str | None] = mapped_column(String(10))
+    Address: Mapped[str | None] = mapped_column(Text)
+    City: Mapped[str | None] = mapped_column(Text)
+    ZipCode: Mapped[str | None] = mapped_column(String(20))
+    VATNumber: Mapped[str | None] = mapped_column(String(64))
+    IsOrganisation: Mapped[str | None] = mapped_column(String(8))
+    IsIndividual: Mapped[str | None] = mapped_column(String(8))
+    FiscalCode: Mapped[str | None] = mapped_column(String(64))
+    Email: Mapped[str | None] = mapped_column(String(320))
+    WebSite: Mapped[str | None] = mapped_column(String(320))
+    PhoneNumber: Mapped[str | None] = mapped_column(String(64))
+    FaxNumber: Mapped[str | None] = mapped_column(String(64))
+    DateFounded: Mapped[str | None] = mapped_column(String(32))
+    LiquidationDate: Mapped[str | None] = mapped_column(String(32))
+    RegisterCourtDate: Mapped[str | None] = mapped_column(String(32))
+
+    extra: Mapped[dict] = mapped_column(JSONB, default=dict)
+
+    Load_Date: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    Source_FILE: Mapped[str | None] = mapped_column(String(255))
+    Change_Reason: Mapped[str] = mapped_column(String(255), default="")
