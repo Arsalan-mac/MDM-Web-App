@@ -18,6 +18,7 @@ const STAGE_ROUTES: Record<string, string> = {
   load_data: "load-data",
   datenmodell: "datenmodell",
   geisterobjekte: "geisterobjekte",
+  sap_carp: "sap-carp",
   address_cleansing: "address-cleansing",
 };
 

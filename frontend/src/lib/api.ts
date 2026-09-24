@@ -196,6 +196,103 @@ export function getConsistencyCheck(token: string, projectId: string): Promise<C
   return apiFetch<ConsistencyFinding[]>(`/projects/${projectId}/geisterobjekte/consistency`, token);
 }
 
+export function uploadSapStammdaten(
+  token: string,
+  projectId: string,
+  file: File,
+): Promise<{ row_count: number; columns: string[]; sap_key_col: string; dup_keys: number }> {
+  const formData = new FormData();
+  formData.append("file", file);
+  return apiUpload(`/projects/${projectId}/sap-carp/stammdaten/upload`, token, formData);
+}
+
+export function uploadFieldMapping(token: string, projectId: string, file: File): Promise<LoadSummary> {
+  const formData = new FormData();
+  formData.append("file", file);
+  return apiUpload<LoadSummary>(`/projects/${projectId}/sap-carp/field-mapping/upload`, token, formData);
+}
+
+export type ColMapEntry = { mandant_column: string; sap_column: string; condition: string | null };
+
+export type OverwriteStatus = {
+  sap_ok: boolean;
+  field_ok: boolean;
+  mandant_ok: boolean;
+  sap_key_col: string | null;
+  mapping_rows: number;
+  match_count: number;
+  already_flagged: number;
+  missing_sap: string[];
+  col_map: ColMapEntry[];
+};
+
+export function getOverwriteStatus(token: string, projectId: string): Promise<OverwriteStatus> {
+  return apiFetch<OverwriteStatus>(`/projects/${projectId}/sap-carp/overwrite/status`, token);
+}
+
+export function runOverwrite(
+  token: string,
+  projectId: string,
+  resetFlag: boolean,
+): Promise<{ flagged: number; sap_rows: number; reset_flag: boolean }> {
+  return apiFetch(`/projects/${projectId}/sap-carp/overwrite/run`, token, {
+    method: "POST",
+    body: JSON.stringify({ reset_flag: resetFlag }),
+  });
+}
+
+export type NameDistributionStatus = { affected_rows: number; already_split: number };
+
+export function getNameDistributionStatus(token: string, projectId: string): Promise<NameDistributionStatus> {
+  return apiFetch<NameDistributionStatus>(`/projects/${projectId}/sap-carp/name-distribution/status`, token);
+}
+
+export function runNameDistribution(
+  token: string,
+  projectId: string,
+  chunkSize: number,
+): Promise<{ affected: number; chunk_size: number }> {
+  return apiFetch(`/projects/${projectId}/sap-carp/name-distribution/run`, token, {
+    method: "POST",
+    body: JSON.stringify({ chunk_size: chunkSize }),
+  });
+}
+
+export type NameSplitStatus = { candidate_count: number; cleanup_count: number };
+
+export function getNameSplitStatus(token: string, projectId: string): Promise<NameSplitStatus> {
+  return apiFetch<NameSplitStatus>(`/projects/${projectId}/sap-carp/name-split/status`, token);
+}
+
+export type NameSplitPreviewRow = {
+  id_party: string;
+  company_name: string;
+  first_name: string;
+  last_name: string;
+  method: string;
+};
+
+export function previewNameSplit(token: string, projectId: string): Promise<NameSplitPreviewRow[]> {
+  return apiFetch<NameSplitPreviewRow[]>(`/projects/${projectId}/sap-carp/name-split/preview`, token, {
+    method: "POST",
+  });
+}
+
+export function applyNameSplit(
+  token: string,
+  projectId: string,
+  entries: { id_party: string; first_name: string; last_name: string }[],
+): Promise<{ written: number }> {
+  return apiFetch(`/projects/${projectId}/sap-carp/name-split/apply`, token, {
+    method: "POST",
+    body: JSON.stringify({ entries }),
+  });
+}
+
+export function clearRedundantCompanyNames(token: string, projectId: string): Promise<{ cleared: number }> {
+  return apiFetch(`/projects/${projectId}/sap-carp/name-split/clear-company-name`, token, { method: "POST" });
+}
+
 export function setStageStatus(
   token: string,
   projectId: string,

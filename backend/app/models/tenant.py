@@ -123,12 +123,19 @@ class _MandantColumns:
     LiquidationDate: Mapped[str | None] = mapped_column(String(32))
     RegisterCourtDate: Mapped[str | None] = mapped_column(String(32))
 
-    # Set by the (not-yet-ported) SAP-CARP-Ueberschreibung stage. Excluded
-    # from every downstream cleansing population, matching the original
-    # app's "Durch SAP ueberschrieben" flag (address_common.FLAG_COL) - a
-    # proper bool here rather than the original's "Ja"/"" string, since this
-    # is an internal flag we set, not a raw field from an uploaded file.
+    # Set by the SAP-CARP-Ueberschreibung stage. Excluded from every
+    # downstream cleansing population, matching the original app's "Durch
+    # SAP ueberschrieben" flag (address_common.FLAG_COL) - a proper bool
+    # here rather than the original's "Ja"/"" string, since this is an
+    # internal flag we set, not a raw field from an uploaded file.
     SapOverridden: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    # Written by SAP-CARP's Name Splitting step (natural persons only,
+    # IsOrganisation="0") - kept as typed columns rather than `extra` since
+    # that same step reads them back (candidate/cleanup queries), unlike
+    # the Name 1-4 SAP export slots below.
+    FirstName: Mapped[str | None] = mapped_column(String(128))
+    LastName: Mapped[str | None] = mapped_column(String(128))
 
     extra: Mapped[dict] = mapped_column(JSONB, default=dict)
 
@@ -258,3 +265,50 @@ class JunkAddress(TenantBase):
     Confidence: Mapped[str] = mapped_column(String(16), default="")  # hoch | mittel | niedrig | ""
 
     Load_Date: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class SapStammdaten(TenantBase):
+    """Raw upload of the 'SAP-Allgemeine Stammdaten' export used by
+    SAP-CARP-Ueberschreibung to overwrite Mandant fields.
+
+    Unlike the other reference tables, this file's columns aren't a fixed,
+    known set - which Mandant column a given SAP column feeds is decided at
+    upload time by whatever the user's Field-Mapping file says, so the
+    entire row is kept in `data` rather than split into typed columns.
+    `sap_key` is the one column resolved and indexed at upload time (the
+    join key: 'IDParty' on new exports, 'Ext. Partnernummer' on older ones -
+    see app/cleansing/sap_carp_service.py::_resolve_sap_key), so the
+    overwrite join doesn't need to inspect the JSONB column for every row.
+    """
+
+    __tablename__ = "sap_stammdaten"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    project_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("projects.id"), index=True)
+    sap_key: Mapped[str] = mapped_column(String(64), index=True)
+    data: Mapped[dict] = mapped_column(JSONB, default=dict)
+    Load_Date: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    Source_FILE: Mapped[str | None] = mapped_column(String(255))
+
+
+class FieldMapping(TenantBase):
+    """Which Mandant column each SAP-Allgemeine-Stammdaten column overwrites,
+    and under what IsOrganisation condition ('Field-Mapping' in the original
+    app). A small, structured file (unlike SapStammdaten's arbitrary bag of
+    business columns), so it gets real typed columns - `extra` still catches
+    any additional columns the uploaded file happens to carry.
+
+    Column names keep the original's literal (spaced) header names via an
+    explicit `name=` override, matching the MandantGegner pattern.
+    """
+
+    __tablename__ = "field_mapping"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    project_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("projects.id"), index=True)
+    MandantColumn: Mapped[str | None] = mapped_column("Mandanten", String(128))
+    SapColumn: Mapped[str | None] = mapped_column("SAP-Allgemeine Stammdaten", String(128))
+    Condition: Mapped[str | None] = mapped_column("Condition", String(64))
+    extra: Mapped[dict] = mapped_column(JSONB, default=dict)
+    Load_Date: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    Source_FILE: Mapped[str | None] = mapped_column(String(255))

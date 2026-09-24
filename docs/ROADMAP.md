@@ -110,6 +110,53 @@ Template Migration, RegisterNumber Cleansing, Delete Records.
   a ghost, and confirmed the check reported the now-stale `junk_address` row
   with the correct count and hint.
 
+- **SAP-CARP-Ueberschreibung** (done) - overwrites Mandanten fields from an
+  uploaded SAP export via a Field-Mapping file (`Mandanten` column,
+  `SAP-Allgemeine Stammdaten` column, optional `IsOrganisation` condition),
+  distributes CompanyName into SAP's Name 1-4 export slots, and splits
+  natural-person names into FirstName/LastName (nameparser rules, Claude
+  Haiku for the ambiguous 3+-token/no-comma case). Two scope calls, both
+  because Field-Mapping/SAP exports don't carry a fixed column set the way
+  Mandanten's own upload does:
+  - A Field-Mapping row targeting one of Mandant's typed columns overwrites
+    it directly; targeting anything else (e.g. the Name 1-4 slots, which no
+    ported stage reads back) lands in `Mandant.extra` instead - the same
+    rule the reference-table loaders already follow, rather than growing
+    the typed column set for fields nothing consumes yet. FirstName/
+    LastName *did* get typed columns, since this same stage's own cleanup
+    query reads them back.
+  - The uploaded "SAP-Allgemeine Stammdaten" file's columns are arbitrary
+    (whatever Field-Mapping references by name), so each row is kept as a
+    JSONB dict (`SapStammdaten.data`) rather than typed columns, with only
+    the resolved join key (`IDParty`, falling back to `Ext. Partnernummer`
+    on older exports) indexed separately.
+  The "erledigt" flag that unlocked the rest of the original app's nav is
+  just this project's `sap_carp` Stage reaching status "done" here - no
+  separate settings table needed, since every stage already has a lock/
+  unlock mechanism the original's single-workspace app didn't.
+  **Deferred**: the SAP-GP-Mapping and SAP-Steuernummern upload slots (the
+  original's own Upload tab tracks them, but nothing overwrite-related
+  consumes them; GP-Mapping isn't consumed by any ported stage yet, and
+  Steuernummern belongs with Tax Cleansing - both get their upload wired in
+  alongside the stage that actually needs them, same pattern Load Data's
+  other reference tables followed until Geisterobjekte needed them).
+  Verified end-to-end against real Postgres/Clerk with a 6-Mandant dataset:
+  two records present in an uploaded SAP-Allgemeine-Stammdaten file (one
+  Field-Mapping row unconditional, one gated on `IsOrganisation = 1`, one
+  targeting a non-typed column, one referencing a SAP column absent from
+  the upload) - the overwrite correctly updated the typed columns, wrote
+  the non-typed target into `extra`, left the record with the missing SAP
+  column untouched, flagged only the two matched records `SapOverridden`,
+  and the status endpoint correctly listed the missing SAP column as a
+  warning. CompanyName distribution matched `textwrap.wrap`'s own output
+  exactly for both a 2-word and a 4-word company name at a small chunk
+  size. Name Splitting was verified across all four rule-based methods
+  (comma format, 2-token, single-token "unklar", plus a real Claude Haiku
+  call for a 3-token name with no comma - correctly split "Hans Peter
+  Mueller" into "Hans" / "Peter Mueller") and its own cleanup action
+  correctly emptied CompanyName only for the three records that had just
+  been given a FirstName/LastName.
+
 ## Phase 3 — Productionization
 
 Azure deployment (Container Apps, Azure DB for PostgreSQL, Azure Cache for

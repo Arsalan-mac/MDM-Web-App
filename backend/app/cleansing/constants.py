@@ -37,3 +37,6 @@ STANDARD_MANDANT_COLUMNS = [
 AUFTRAG_COLUMNS = ["IDProject", "IDParty", "ProjectNumber", "Year", "AssessmentYear"]
 CONNECTED_PARTY_COLUMNS = ["IDParty", "IDParty_Related"]
 MANDANT_GEGNER_COLUMNS = ["Client - IDParty", "Opponent - IDParty"]
+
+# SAP-CARP-Ueberschreibung's Field-Mapping upload (app/cleansing/sap_carp_service.py).
+FIELD_MAPPING_COLUMNS = ["Mandanten", "SAP-Allgemeine Stammdaten", "Condition"]
