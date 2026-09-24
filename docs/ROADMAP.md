@@ -226,6 +226,47 @@ Template Migration, RegisterNumber Cleansing, Delete Records.
   ProjectName/AddedDate group with two different ServiceNames while
   leaving the unambiguous group alone.
 
+- **Tax Cleansing - VAT-Cleansing phase only** (done) - ported from
+  tax_cleansing_module.py's 💶 VAT-Cleansing tab: `run_unified_vat_analysis`
+  (empty-VATNumber backfill from ViesNumber, Swiss/Norwegian pre-cleaning,
+  Russian INN/KPP compound splitting, a syntax junk check, then pattern
+  validation against a ~70-country regex table) and `run_vat_duplicate_
+  analysis`. Steuernummer-Cleansing (Fiscal Code, backed by a ~460-line
+  SAP fiscal-rules reference table) and Migration Preparation (TAXTYPE
+  validation/remap/collision-fix workflow, SAP sync) are the original's
+  other two tabs on this same page - deliberately deferred as separate,
+  larger follow-up passes rather than bundled in here (this module is
+  ~3.4k lines, by far the largest ported so far, and the three tabs are
+  independent workflows). `ViesNumber` was promoted to a typed Mandant
+  column since this stage reads and writes it directly; the pure VAT
+  helpers (Swiss/Norwegian/Russian cleaning, the country regex table)
+  live in their own `app/cleansing/vat_rules.py`, same reasoning as
+  `register_checks.py` - reusable by Migration Preparation later, and
+  independently unit-testable.
+  One correctness improvement over the original: its "does an RU KPP
+  split-row's ID make it into the syntax-checked set" step filters by
+  `df[PRIMARY_KEY].isin(valid_syntax_ids)` - `IDParty`-based membership,
+  not row identity - and since an INN row and its KPP row legitimately
+  share the same IDParty, a KPP row can accidentally inherit its INN
+  sibling's pass/fail syntax result instead of being judged on its own
+  value. This port tracks each check entry independently instead, so the
+  INN and KPP halves of a split value are always judged on their own
+  merits.
+  Verified end-to-end against real Postgres/Clerk with a 12-Mandant
+  dataset covering every path: a clean German VAT; a too-short syntax
+  failure; a pattern mismatch (7-digit value doesn't fit DE's 9-digit
+  format); Swiss pre-cleaning (`CHE-123.456.789 MWST` -> validates);
+  Norwegian pre-cleaning (bare 9 digits -> `NO...MVA` -> validates); a
+  valid Russian INN/KPP split; an invalid split (9-digit INN fails RU's
+  10/12-digit rule, 5-digit KPP fails the 9-digit rule - both correctly
+  flagged independently); a 2-slash Russian value correctly junked
+  immediately as unsplittable; a ViesNumber backfill that then validated
+  clean and was correctly persisted to `mandanten`; and two records
+  sharing one VAT number under different formatting (dashes vs. none)
+  correctly matched as duplicates. The quality-report Organisation/
+  Natuerliche-Person split (9 vs. 3 records, exact valid/junk/empty
+  counts) matched a hand-computed expectation exactly.
+
 ## Phase 3 — Productionization
 
 Azure deployment (Container Apps, Azure DB for PostgreSQL, Azure Cache for

@@ -129,6 +129,10 @@ class _MandantColumns:
     RegisterCity: Mapped[str | None] = mapped_column(String(128))
     RegisterCourtKindCode: Mapped[str | None] = mapped_column(String(32))
 
+    # Read by Tax Cleansing's VAT analysis, which backfills an empty
+    # VATNumber from this field before checking it.
+    ViesNumber: Mapped[str | None] = mapped_column(String(64))
+
     # Set by the SAP-CARP-Ueberschreibung stage. Excluded from every
     # downstream cleansing population, matching the original app's "Durch
     # SAP ueberschrieben" flag (address_common.FLAG_COL) - a proper bool

@@ -29,6 +29,7 @@ STANDARD_MANDANT_COLUMNS = [
     "UserCode_Added", "UserCode_Kummerer", "FiscalCode", "Email",
     "WebSite", "PhoneNumber", "FaxNumber", "DateFounded", "LiquidationDate",
     "RegisterCourtDate", "RegisterNumber", "RegisterCity", "RegisterCourtKindCode",
+    "ViesNumber",
 ]
 
 # Standard columns for the generic reference tables Geisterobjekte's ghost

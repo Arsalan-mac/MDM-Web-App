@@ -10,6 +10,7 @@ from app.api.routers import (
     projects,
     quality,
     sap_carp,
+    tax_cleansing,
     tenants,
 )
 from app.config import get_settings
@@ -35,3 +36,4 @@ app.include_router(chat.router)
 app.include_router(geisterobjekte.router)
 app.include_router(sap_carp.router)
 app.include_router(quality.router)
+app.include_router(tax_cleansing.router)

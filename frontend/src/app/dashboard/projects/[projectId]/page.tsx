@@ -20,6 +20,7 @@ const STAGE_ROUTES: Record<string, string> = {
   geisterobjekte: "geisterobjekte",
   sap_carp: "sap-carp",
   quality: "quality",
+  tax_cleansing: "tax-cleansing",
   address_cleansing: "address-cleansing",
 };
 

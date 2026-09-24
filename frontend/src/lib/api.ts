@@ -438,6 +438,50 @@ export function clearRedundantCompanyNames(token: string, projectId: string): Pr
   return apiFetch(`/projects/${projectId}/sap-carp/name-split/clear-company-name`, token, { method: "POST" });
 }
 
+export type RuPrecleaningRow = {
+  id_party: string;
+  company_name: string | null;
+  is_organisation: string | null;
+  is_individual: string | null;
+  is_inactive: string | null;
+  country_code: string | null;
+  vat_number_original: string;
+  inn_cleaned: string;
+  kpp_cleaned: string;
+  reason: string;
+};
+
+export type VatJunkRow = {
+  id_party: string;
+  company_name: string | null;
+  is_organisation: string | null;
+  is_individual: string | null;
+  is_inactive: string | null;
+  country_code: string | null;
+  vat_number: string;
+  reason: string;
+  rule_used: string;
+};
+
+export type VatAnalysisResult = {
+  vies_backfilled: number;
+  ru_precleaning: RuPrecleaningRow[];
+  junk: VatJunkRow[];
+  quality_report: QualityReportRow[];
+};
+
+export function runVatAnalysis(token: string, projectId: string): Promise<VatAnalysisResult> {
+  return apiFetch<VatAnalysisResult>(`/projects/${projectId}/tax-cleansing/vat/analyze`, token, { method: "POST" });
+}
+
+export type VatDuplicateRow = { id_party: string; company_name: string | null; vat_number: string };
+
+export function runVatDuplicateCheck(token: string, projectId: string): Promise<VatDuplicateRow[]> {
+  return apiFetch<VatDuplicateRow[]>(`/projects/${projectId}/tax-cleansing/vat/duplicates`, token, {
+    method: "POST",
+  });
+}
+
 export function setStageStatus(
   token: string,
   projectId: string,
