@@ -48,10 +48,15 @@ Claude-powered "talk to your data" agent.
   search, per-record finding detail, and a Mandanten count. No write tools -
   the agent explains what Accept/Nacharbeit would do rather than doing it.
   Conversation history is kept client-side (plain text turns resent each
-  request), not persisted server-side. Verified: the five tools' query logic
-  tested directly against real Postgres data (correct in every case); the
-  actual Claude round-trip is untested pending a real `ANTHROPIC_API_KEY`
-  (the 503 "not configured" guard was verified instead).
+  request), not persisted server-side. Verified against the real Claude API
+  (a personal key, 30-day expiry - a real project key should replace it
+  before this goes further): asked about pipeline status and Address
+  Cleansing findings, got a correct, well-synthesized answer with a sharp
+  observation the tools didn't hand it directly (findings exist but the
+  stage is still locked); multi-turn history round-tripped correctly; and
+  asking it to "fix" a finding was correctly refused - it explained what
+  accepting would do and pointed back to the UI's Accept button instead of
+  pretending to apply it.
 
 ## Phase 2 — Port the remaining pipeline stages
 
