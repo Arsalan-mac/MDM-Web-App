@@ -212,6 +212,135 @@ export function uploadFieldMapping(token: string, projectId: string, file: File)
   return apiUpload<LoadSummary>(`/projects/${projectId}/sap-carp/field-mapping/upload`, token, formData);
 }
 
+export function runValueCleanup(
+  token: string,
+  projectId: string,
+  badValues: string[],
+): Promise<{ cleared: number }> {
+  return apiFetch(`/projects/${projectId}/quality/value-cleanup`, token, {
+    method: "POST",
+    body: JSON.stringify({ bad_values: badValues }),
+  });
+}
+
+export type FuzzyMatch = {
+  id_party_i: string;
+  is_inactive_i: string | null;
+  company_name_i: string | null;
+  address_i: string | null;
+  city_i: string | null;
+  zip_code_i: string | null;
+  usercode_kummerer_i: string | null;
+  id_party_j: string;
+  is_inactive_j: string | null;
+  company_name_j: string | null;
+  address_j: string | null;
+  city_j: string | null;
+  zip_code_j: string | null;
+  usercode_kummerer_j: string | null;
+  country_code: string;
+  similarity_pct: number;
+  category: string;
+};
+
+export function runFuzzyDuplicateCheck(token: string, projectId: string): Promise<FuzzyMatch[]> {
+  return apiFetch<FuzzyMatch[]>(`/projects/${projectId}/quality/fuzzy-duplicates`, token, { method: "POST" });
+}
+
+export type QualityReportRow = {
+  type: string;
+  total_clients: number;
+  total_valid: number;
+  total_junk: number;
+  total_empty: number;
+  pct_valid: number;
+  pct_junk: number;
+  pct_empty: number;
+};
+
+export type RegisterJunk = {
+  id_party: string;
+  company_name: string | null;
+  is_organisation: string | null;
+  is_individual: string | null;
+  is_inactive: string | null;
+  country_code: string | null;
+  register_number: string | null;
+  register_city: string | null;
+  register_court_kind_code: string | null;
+  reason: string;
+};
+
+export type RegisterNumberCheck = { junk: RegisterJunk[]; quality_report: QualityReportRow[] };
+
+export function runRegisterNumberCheck(token: string, projectId: string): Promise<RegisterNumberCheck> {
+  return apiFetch<RegisterNumberCheck>(`/projects/${projectId}/quality/register-number`, token, { method: "POST" });
+}
+
+export type ContactIssue = {
+  id_party: string;
+  company_name: string | null;
+  is_organisation: string | null;
+  is_individual: string | null;
+  is_inactive: string | null;
+  invalid_value: string | null;
+  cleaned_value: string | null;
+  reason: string;
+};
+
+export type ContactCheck = { issues: ContactIssue[]; quality_report: QualityReportRow[] };
+
+export type CommunicationCheck = {
+  email: ContactCheck;
+  website: ContactCheck;
+  phone: ContactCheck;
+  fax: ContactCheck;
+};
+
+export function runCommunicationCheck(token: string, projectId: string): Promise<CommunicationCheck> {
+  return apiFetch<CommunicationCheck>(`/projects/${projectId}/quality/communication`, token, { method: "POST" });
+}
+
+export type CompletenessRow = {
+  type: string;
+  attribute: string;
+  check_type: string;
+  total_rows: number;
+  count_relevant: number;
+  pct: number | null;
+};
+
+export function runCompletenessCheck(token: string, projectId: string): Promise<CompletenessRow[]> {
+  return apiFetch<CompletenessRow[]>(`/projects/${projectId}/quality/completeness`, token, { method: "POST" });
+}
+
+export type DateStandardizationRow = {
+  id_party: string;
+  company_name: string | null;
+  changes: Record<string, { old: string | null; new: string }>;
+};
+
+export type DateStandardizationResult = { updated: number; preview: DateStandardizationRow[] };
+
+export function runDateStandardization(token: string, projectId: string): Promise<DateStandardizationResult> {
+  return apiFetch<DateStandardizationResult>(`/projects/${projectId}/quality/date-standardization`, token, {
+    method: "POST",
+  });
+}
+
+export type AuftragIdProjectRow = {
+  id_party: string | null;
+  project_name: string | null;
+  added_date: string | null;
+  service_name: string | null;
+};
+
+export function runAuftragIdProjectCheck(token: string, projectId: string): Promise<AuftragIdProjectRow[]> {
+  return apiFetch<AuftragIdProjectRow[]>(`/projects/${projectId}/quality/auftrag-id-project`, token, {
+    method: "POST",
+  });
+}
+
 export type ColMapEntry = { mandant_column: string; sap_column: string; condition: string | null };
 
 export type OverwriteStatus = {

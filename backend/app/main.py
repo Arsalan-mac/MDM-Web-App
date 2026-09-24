@@ -1,7 +1,17 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routers import address_cleansing, chat, geisterobjekte, health, load_data, projects, sap_carp, tenants
+from app.api.routers import (
+    address_cleansing,
+    chat,
+    geisterobjekte,
+    health,
+    load_data,
+    projects,
+    quality,
+    sap_carp,
+    tenants,
+)
 from app.config import get_settings
 
 settings = get_settings()
@@ -24,3 +34,4 @@ app.include_router(address_cleansing.router)
 app.include_router(chat.router)
 app.include_router(geisterobjekte.router)
 app.include_router(sap_carp.router)
+app.include_router(quality.router)

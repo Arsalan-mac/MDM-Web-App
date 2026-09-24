@@ -123,6 +123,12 @@ class _MandantColumns:
     LiquidationDate: Mapped[str | None] = mapped_column(String(32))
     RegisterCourtDate: Mapped[str | None] = mapped_column(String(32))
 
+    # Read by Quality Analysis's Register-Nr. check (app/cleansing/
+    # register_checks.py) and, later, the RegisterNumber Cleansing stage.
+    RegisterNumber: Mapped[str | None] = mapped_column(String(64))
+    RegisterCity: Mapped[str | None] = mapped_column(String(128))
+    RegisterCourtKindCode: Mapped[str | None] = mapped_column(String(32))
+
     # Set by the SAP-CARP-Ueberschreibung stage. Excluded from every
     # downstream cleansing population, matching the original app's "Durch
     # SAP ueberschrieben" flag (address_common.FLAG_COL) - a proper bool
@@ -170,7 +176,8 @@ class Auftrag(TenantBase):
     - full replace per project, no column-alias mapping since these are
     fixed source-system field names, not user-facing data needing cleanup.
     Primarily exists so Geisterobjekte's ghost query can check "does this
-    Mandant have any orders at all"; not yet consumed by anything else.
+    Mandant have any orders at all". Also read by Quality Analysis's
+    Auftraege DQ / ID-Project check (ProjectName, AddedDate, ServiceName).
     """
 
     __tablename__ = "auftraege"
@@ -182,6 +189,9 @@ class Auftrag(TenantBase):
     ProjectNumber: Mapped[str | None] = mapped_column(String(64))
     Year: Mapped[str | None] = mapped_column(String(16))
     AssessmentYear: Mapped[str | None] = mapped_column(String(16))
+    ProjectName: Mapped[str | None] = mapped_column(String(255))
+    AddedDate: Mapped[str | None] = mapped_column(String(32))
+    ServiceName: Mapped[str | None] = mapped_column(String(255))
     extra: Mapped[dict] = mapped_column(JSONB, default=dict)
     Load_Date: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     Source_FILE: Mapped[str | None] = mapped_column(String(255))

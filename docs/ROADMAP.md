@@ -157,6 +157,56 @@ Template Migration, RegisterNumber Cleansing, Delete Records.
   correctly emptied CompanyName only for the three records that had just
   been given a FirstName/LastName.
 
+- **Quality Analysis** (done) - seven independent data-quality checks,
+  ported from `app_analysis_ui`'s Mandanten-DQ and Auftraege-DQ tabs: a
+  DB-Bereinigung value cleanup, fuzzy duplicate detection (TF-IDF +
+  Nearest Neighbors, blocked by country/ZIP prefix), a RegisterNumber
+  junk check, Email/Website/Phone/Fax format checks, a per-attribute
+  completeness report, date standardization (DateFounded/LiquidationDate/
+  RegisterCourtDate to YYYY-MM-DD), and an Auftraege ID-Project conflict
+  check. Unlike Address Cleansing, none of these have a persistent
+  "Nacharbeit" review queue in the original app - each is "run it, see the
+  result" - so nothing here gets its own results table; every check
+  recomputes on each call and the frontend just displays the latest
+  response. The original's local-Excel exports (`save_to_local_drive`,
+  the consolidated `DQ_Quality_Report.xlsx`) aren't ported, consistent
+  with every other stage's Excel-export deferral so far.
+  **Scope decisions**:
+  - **Missing ID is not ported at all** - the original's whole reason to
+    exist (Mandanten with no IDParty) is structurally impossible here:
+    `Mandant.IDParty` is a NOT NULL primary-key column
+    (app/models/tenant.py), so such a row can never be inserted in the
+    first place. A check that can only ever return zero isn't worth
+    building.
+  - The completeness check's ~48-column target list (mirrors SAP BUT000's
+    real field set) reads whichever of Mandant's typed columns match, and
+    falls back to `extra` for the rest (GroupName, BirthDate, TitleCode,
+    etc.) - the same typed-vs-extra split every prior stage has used, just
+    applied at read time here instead of write time.
+  - `RegisterNumber`/`RegisterCity`/`RegisterCourtKindCode` and Auftrag's
+    `ProjectName`/`AddedDate`/`ServiceName` got promoted to typed columns
+    since this stage's own checks query/group by them directly.
+    `register_number_issues` (the junk-detection rules) was ported into
+    its own `app/cleansing/register_checks.py` rather than inline, so the
+    future RegisterNumber Cleansing stage can import the same rules as its
+    "Stufe 1", matching the original's single-source-of-truth comment.
+  Verified end-to-end against real Postgres/Clerk with a 6-Mandant + 3-
+  Auftrag dataset: the RegisterNumber check correctly flagged a dummy
+  sequence, a digit-repetition, and a placeholder value (and correctly
+  left an empty value out of both the junk and valid counts); the
+  communication check correctly caught a malformed email/URL/phone number
+  while leaving clean ones alone; the completeness check correctly showed
+  0% fill for an `extra`-only column (GroupName) that no test record set;
+  date standardization correctly resolved both an mm/dd/yyyy value and a
+  dd.mm.yyyy value to the same real calendar date and persisted the
+  rewrite; the fuzzy check correctly matched two near-duplicate company
+  records ("Mueller Handels GmbH" / "Muller Handels GmbH", same address)
+  at 84.5% similarity while leaving unrelated records alone; the DB
+  cleanup correctly blanked an exact-match junk value ("-") in Address;
+  and the Auftraege ID-Project check correctly flagged the one IDParty/
+  ProjectName/AddedDate group with two different ServiceNames while
+  leaving the unambiguous group alone.
+
 ## Phase 3 — Productionization
 
 Azure deployment (Container Apps, Azure DB for PostgreSQL, Azure Cache for

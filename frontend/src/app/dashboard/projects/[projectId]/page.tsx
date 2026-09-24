@@ -19,6 +19,7 @@ const STAGE_ROUTES: Record<string, string> = {
   datenmodell: "datenmodell",
   geisterobjekte: "geisterobjekte",
   sap_carp: "sap-carp",
+  quality: "quality",
   address_cleansing: "address-cleansing",
 };
 
