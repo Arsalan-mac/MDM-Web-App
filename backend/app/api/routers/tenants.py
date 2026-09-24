@@ -16,6 +16,12 @@ router = APIRouter(prefix="/tenants", tags=["tenants"])
 class ProvisionTenantRequest(BaseModel):
     name: str = Field(..., min_length=1, max_length=255)
     slug: str = Field(..., min_length=1, max_length=60)
+    # Clerk's default (v2) session token is minimal and does not carry an
+    # email claim - confirmed while testing sign-in against a real token.
+    # The frontend already has the signed-in user's email client-side
+    # (via Clerk's useUser()), so it's passed explicitly rather than
+    # re-derived from the token.
+    email: str = ""
 
 
 class TenantOut(BaseModel):
@@ -63,7 +69,7 @@ async def provision_tenant(
         TenantUser(
             tenant_id=tenant_id,
             clerk_user_id=user.clerk_user_id,
-            email=user.claims.get("email", ""),
+            email=payload.email,
             role="admin",
         )
     )

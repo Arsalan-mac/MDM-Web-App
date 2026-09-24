@@ -81,13 +81,29 @@ async def get_current_claims(
     return claims
 
 
+def _extract_org_claims(claims: dict[str, Any]) -> tuple[str | None, str | None]:
+    """Return (org_id, org_role) from a Clerk session token.
+
+    Default (v2) Clerk session tokens nest the active organization under a
+    shortened "o" claim: {"id": ..., "rol": ..., "slg": ...} - confirmed
+    against a real token from our Clerk instance while testing sign-in.
+    Custom JWT templates can still emit the older flat "org_id"/"org_role"
+    claims, so that shape is kept as a fallback.
+    """
+    org = claims.get("o")
+    if isinstance(org, dict):
+        return org.get("id"), org.get("rol")
+    return claims.get("org_id"), claims.get("org_role")
+
+
 async def get_current_user(claims: dict[str, Any] = Depends(get_current_claims)) -> AuthenticatedUser:
     clerk_user_id = claims.get("sub")
     if not clerk_user_id:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token missing subject claim.")
+    org_id, org_role = _extract_org_claims(claims)
     return AuthenticatedUser(
         clerk_user_id=clerk_user_id,
-        clerk_org_id=claims.get("org_id"),
-        org_role=claims.get("org_role"),
+        clerk_org_id=org_id,
+        org_role=org_role,
         claims=claims,
     )

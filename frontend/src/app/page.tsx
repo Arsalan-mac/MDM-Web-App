@@ -1,5 +1,12 @@
 import Link from "next/link";
-import { SignInButton, SignUpButton, SignedIn, SignedOut, UserButton } from "@clerk/nextjs";
+import {
+  SignInButton,
+  SignUpButton,
+  SignedIn,
+  SignedOut,
+  UserButton,
+  OrganizationSwitcher,
+} from "@clerk/nextjs";
 
 export default function Home() {
   return (
@@ -20,7 +27,12 @@ export default function Home() {
         <p>
           <Link href="/dashboard">Go to dashboard</Link>
         </p>
-        <UserButton />
+        <div style={{ display: "flex", gap: "1rem", alignItems: "center" }}>
+          <UserButton />
+          {/* Creating/selecting an org here is what makes it the active tenant
+              for subsequent API calls - see app/api/deps.py::get_current_tenant. */}
+          <OrganizationSwitcher hidePersonal createOrganizationMode="modal" />
+        </div>
       </SignedIn>
     </main>
   );

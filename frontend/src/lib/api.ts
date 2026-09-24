@@ -45,9 +45,9 @@ export function createProject(token: string, name: string): Promise<Project> {
   });
 }
 
-export function provisionTenant(token: string, name: string, slug: string) {
+export function provisionTenant(token: string, name: string, slug: string, email: string) {
   return apiFetch("/tenants/provision", token, {
     method: "POST",
-    body: JSON.stringify({ name, slug }),
+    body: JSON.stringify({ name, slug, email }),
   });
 }
