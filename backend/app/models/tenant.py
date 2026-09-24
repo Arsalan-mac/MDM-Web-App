@@ -147,6 +147,20 @@ class _MandantColumns:
     FirstName: Mapped[str | None] = mapped_column(String(128))
     LastName: Mapped[str | None] = mapped_column(String(128))
 
+    # Written by Address Cleansing's Zerlegung step (SAP address
+    # decomposition) - split out of `Address` into SAP's ADRC target field
+    # shape. Typed rather than `extra` since SAP Template Migration's ADRC
+    # sheet reads them back. REGION intentionally has no column: the
+    # original app stopped exporting it (Bundesland codes the SAP cockpit
+    # rejected per-country), so ADRC's REGION target field maps to a
+    # constant empty string instead - see app/cleansing/sap_template_mappings.py.
+    STREET: Mapped[str | None] = mapped_column(String(60))
+    HOUSE_NUM1: Mapped[str | None] = mapped_column(String(10))
+    STR_SUPPL1: Mapped[str | None] = mapped_column(String(40))
+    STR_SUPPL2: Mapped[str | None] = mapped_column(String(40))
+    STR_SUPPL3: Mapped[str | None] = mapped_column(String(40))
+    BUILDING: Mapped[str | None] = mapped_column(String(20))
+
     extra: Mapped[dict] = mapped_column(JSONB, default=dict)
 
     Load_Date: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
@@ -277,6 +291,42 @@ class JunkAddress(TenantBase):
     Kategorie: Mapped[str] = mapped_column(String(64))
     Aktion: Mapped[str] = mapped_column(String(16))  # ERSETZEN | LEEREN | MANUELL
     Confidence: Mapped[str] = mapped_column(String(16), default="")  # hoch | mittel | niedrig | ""
+
+    Load_Date: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class AddressDecompositionResult(TenantBase):
+    """Proposals from Address Cleansing's Zerlegung step ('SAP_ADDRESS_
+    RESULT' in the original app) - splits `Mandant.Address` into SAP's ADRC
+    target fields (STREET/HOUSE_NUM1/STR_SUPPL1-3/BUILDING). One row per
+    candidate Mandant, all six proposed fields together (unlike JunkAddress,
+    which is one row per single-field finding) - a tiered regex parser
+    handles the bulk of cases, with a Claude Haiku fallback for addresses
+    it can't confidently split (same pattern as SAP-CARP's Name Splitting).
+    """
+
+    __tablename__ = "address_decomposition_result"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    project_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("projects.id"), index=True)
+    IDParty: Mapped[str] = mapped_column(String(64), index=True)
+
+    CompanyName: Mapped[str | None] = mapped_column(Text)
+    CountryCode: Mapped[str | None] = mapped_column(String(10))
+    Address: Mapped[str | None] = mapped_column(Text)
+
+    STREET: Mapped[str] = mapped_column(String(60), default="")
+    HOUSE_NUM1: Mapped[str] = mapped_column(String(10), default="")
+    STR_SUPPL1: Mapped[str] = mapped_column(String(40), default="")
+    STR_SUPPL2: Mapped[str] = mapped_column(String(40), default="")
+    STR_SUPPL3: Mapped[str] = mapped_column(String(40), default="")
+    BUILDING: Mapped[str] = mapped_column(String(20), default="")
+    StreetSpelledOut: Mapped[str] = mapped_column(String(60), default="")  # "Str." -> "Straße"/"Strasse"
+
+    ParseMethod: Mapped[str] = mapped_column(String(16))
+    Confidence: Mapped[str] = mapped_column(String(16), default="")  # hoch | mittel | ""
+    Hinweis: Mapped[str] = mapped_column(Text, default="")
+    Aktion: Mapped[str] = mapped_column(String(16))  # ERSETZEN | MANUELL
 
     Load_Date: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 

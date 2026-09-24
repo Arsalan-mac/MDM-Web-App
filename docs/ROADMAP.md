@@ -368,6 +368,50 @@ Template Migration, RegisterNumber Cleansing, Delete Records.
   This completes Tax Cleansing (all three tabs: VAT-Cleansing,
   Steuernummer-Cleansing, Migration Preparation).
 
+- **Address Cleansing - Zerlegung** (done) - ported from sap_address_
+  module.py: splits `Mandant.Address` into SAP's ADRC target fields
+  (STREET/HOUSE_NUM1/STR_SUPPL1-3/BUILDING) via a staged regex parser (T0
+  PO box, T1 house number at the end, T2 at the front, T3 comma-segment
+  best-effort for complex cases), with a Claude Haiku batch fallback for
+  addresses the regex can't confidently split - same architecture as
+  SAP-CARP's Name Splitting (regex first, LLM only for the genuinely hard
+  cases, LLM output validated against the original text - every digit and
+  token must trace back to the source address, nothing invented or
+  translated - before it's trusted). All length limits (STREET 60,
+  STR_SUPPL 40 each, HOUSE_NUM1 10, BUILDING 20) are enforced centrally in
+  code for both the regex and LLM paths, never left to the LLM.
+  **Why this got built now**: SAP Template Migration's ADRC sheet needs
+  these fields, and Zerlegung was the original's own upstream step that
+  populates them - deferred as a follow-up when Address Cleansing was
+  first ported (see that entry above), picked up now as a genuine
+  prerequisite rather than skipped.
+  **Scope decisions**: the proposal/review/accept workflow follows Address
+  Cleansing's own Nacharbeit precedent - no old-value guard or persisted
+  change log (no concurrent editors here yet, same call already made for
+  Nacharbeit) - but keeps the original's confidence-tiered bulk "Übernahme"
+  (accept all Hoch, or Hoch+Mittel, in one call) rather than Nacharbeit's
+  one-row-at-a-time accept, since Zerlegung's own UX was always bulk-first
+  in the original app. The LLM result cache table and `calibrate_against_
+  sap_streets` (a QA tool comparing parsed streets against a real SAP
+  street-name export, with no ported stage consuming its output) are not
+  carried over - an in-memory cache per run is enough, matching how SAP-
+  CARP's Name Splitting already diverged from the original's cross-run
+  caching table.
+  Verified with 19 unit tests covering every parse tier (T0-T3), the
+  length-enforcement cascade, and `spell_out_street`, plus a live run
+  against real Postgres/Clerk: a clean DE address (T1, Hoch), a US
+  number-first address (T2, Hoch), a PO box (T0, Hoch), and a c/o-prefixed
+  address (Mittel) all parsed to their exact expected fields; an address
+  Adress-Analyse itself had already flagged (KONTAKTINFO) and one it had
+  independently flagged for having no house number (KEINE_HAUSNUMMER) were
+  both correctly excluded from the candidate set - the same "skip rows
+  with an open manual JUNK_ADDRESS finding" rule the original enforces;
+  accepting Hoch-confidence proposals updated exactly those 3 Mandant
+  records and removed them from the list; accepting the remaining Mittel
+  proposal with "spell out" enabled wrote the spelled-out street form
+  ("Bahnhofstr." -> "Bahnhofstraße") - confirmed by querying Postgres
+  directly, not just the API response.
+
 ## Phase 3 — Productionization
 
 Azure deployment (Container Apps, Azure DB for PostgreSQL, Azure Cache for

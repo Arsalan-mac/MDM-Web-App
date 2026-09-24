@@ -174,6 +174,57 @@ export async function acceptAddressFinding(token: string, projectId: string, fin
   }
 }
 
+export type DecompositionSummary = {
+  candidates: number;
+  sent_to_llm: number;
+  llm_resolved: number;
+  by_method: Record<string, number>;
+  by_confidence: Record<string, number>;
+};
+
+export type DecompositionResult = {
+  id: string;
+  IDParty: string;
+  CompanyName: string | null;
+  CountryCode: string | null;
+  Address: string | null;
+  STREET: string;
+  HOUSE_NUM1: string;
+  STR_SUPPL1: string;
+  STR_SUPPL2: string;
+  STR_SUPPL3: string;
+  BUILDING: string;
+  StreetSpelledOut: string;
+  ParseMethod: string;
+  Confidence: "hoch" | "mittel" | "";
+  Hinweis: string;
+  Aktion: "ERSETZEN" | "MANUELL";
+};
+
+export function runZerlegung(token: string, projectId: string, useLlm: boolean = true): Promise<DecompositionSummary> {
+  return apiFetch<DecompositionSummary>(
+    `/projects/${projectId}/address-cleansing/zerlegung/run?use_llm=${useLlm}`,
+    token,
+    { method: "POST" },
+  );
+}
+
+export function listZerlegung(token: string, projectId: string): Promise<DecompositionResult[]> {
+  return apiFetch<DecompositionResult[]>(`/projects/${projectId}/address-cleansing/zerlegung`, token);
+}
+
+export function acceptZerlegung(
+  token: string,
+  projectId: string,
+  confidences: string[],
+  spellOut: boolean,
+): Promise<{ updated: number }> {
+  return apiFetch(`/projects/${projectId}/address-cleansing/zerlegung/accept`, token, {
+    method: "POST",
+    body: JSON.stringify({ confidences, spell_out: spellOut }),
+  });
+}
+
 export type ChatTurn = { role: "user" | "assistant"; content: string };
 
 export async function sendChatMessage(
