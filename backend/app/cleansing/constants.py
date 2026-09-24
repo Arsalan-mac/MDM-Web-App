@@ -30,6 +30,9 @@ STANDARD_MANDANT_COLUMNS = [
     "WebSite", "PhoneNumber", "FaxNumber", "DateFounded", "LiquidationDate",
     "RegisterCourtDate", "RegisterNumber", "RegisterCity", "RegisterCourtKindCode",
     "ViesNumber",
+    # Read by SAP Template Migration's BUT000-General/ADRC sheets - raw
+    # uploaded reference data, not derived by any ported cleansing stage.
+    "AddedDate", "RoedlCompanyNumber", "TitleCode", "LegalFormCode",
 ]
 
 # Standard columns for the generic reference tables Geisterobjekte's ghost

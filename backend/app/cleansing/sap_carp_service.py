@@ -5,10 +5,11 @@ export slots, and split natural-person names into FirstName/LastName.
 Ported from sap_carp_module.py. Two scope differences from the original,
 both documented in docs/ROADMAP.md:
 - Field-Mapping can target any of Mandant's typed columns directly; a
-  target that isn't one (e.g. the Name 1-4 export slots, which nothing
-  else here reads yet) is written into Mandant.extra instead of growing
+  target that isn't one is written into Mandant.extra instead of growing
   the typed column set for a field no ported stage consumes - the same
-  rule the reference-table loaders already follow.
+  rule the reference-table loaders already follow. (Name 1-4 started out
+  this way too, before SAP Template Migration's BUT000-General sheet
+  needed to read them back - they're typed columns now.)
 - The "erledigt" flag that unlocked the rest of the original app's nav is
   just this project's "sap_carp" Stage reaching status "done" here
   (app/cleansing/pipeline.py) - no separate settings table needed, since
@@ -33,7 +34,16 @@ _SAP_KEY_CANDIDATES = ["IDParty", "Ext. Partnernummer"]
 _SYSTEM_MANDANT_COLUMNS = {
     "project_id", "IDParty", "extra", "SapOverridden", "Load_Date", "Source_FILE", "Change_Reason",
 }
-_WRITABLE_MANDANT_COLUMNS = {c.name for c in Mandant.__table__.columns if c.name not in _SYSTEM_MANDANT_COLUMNS}
+# Keyed by DB column name (what a Field-Mapping row's "Mandanten column"
+# value names, e.g. "Name 1") -> the Python attribute setattr() needs. Most
+# columns have identical name and attribute key, but a few (Name1-4) use an
+# explicit differently-spelled column name to keep the original field name
+# for the SAP mapping spec - see app/models/tenant.py.
+_MANDANT_COLUMN_TO_ATTR = {
+    col.name: attr
+    for attr, col in Mandant.__mapper__.columns.items()
+    if col.name not in _SYSTEM_MANDANT_COLUMNS
+}
 
 _NAME_MODEL = "claude-haiku-4-5-20251001"
 _BATCH_SIZE = 50
@@ -212,8 +222,9 @@ async def run_overwrite(db: AsyncSession, project_id: uuid.UUID, reset_flag: boo
             if condition is not None and is_org != condition:
                 continue
             sap_val = sap_row[sap_col]
-            if mand_col in _WRITABLE_MANDANT_COLUMNS:
-                setattr(m, mand_col, sap_val)
+            attr = _MANDANT_COLUMN_TO_ATTR.get(mand_col)
+            if attr is not None:
+                setattr(m, attr, sap_val)
             else:
                 m.extra = {**m.extra, mand_col: sap_val}
             changed = True
@@ -226,11 +237,9 @@ async def run_overwrite(db: AsyncSession, project_id: uuid.UUID, reset_flag: boo
 
 
 # ─────────────────────────────────────────────────────────────────────────
-# Step 2: CompanyName -> Name 1-4 (SAP export slots, kept in `extra` - see
-# module docstring)
+# Step 2: CompanyName -> Name 1-4 (SAP export slots, typed Mandant columns -
+# read back by SAP Template Migration's BUT000-General sheet)
 # ─────────────────────────────────────────────────────────────────────────
-
-_NAME_SLOTS = ["Name 1", "Name 2", "Name 3", "Name 4"]
 
 
 async def get_name_distribution_status(db: AsyncSession, project_id: uuid.UUID) -> dict:
@@ -252,8 +261,8 @@ async def get_name_distribution_status(db: AsyncSession, project_id: uuid.UUID) 
             .select_from(Mandant)
             .where(
                 Mandant.project_id == project_id,
-                Mandant.extra["Name 1"].astext.is_not(None),
-                func.trim(Mandant.extra["Name 1"].astext) != "",
+                Mandant.Name1.is_not(None),
+                func.trim(Mandant.Name1) != "",
             )
         )
     ).scalar_one()
@@ -273,13 +282,10 @@ async def run_name_distribution(db: AsyncSession, project_id: uuid.UUID, chunk_s
         if not name:
             continue
         words = textwrap.wrap(name, width=chunk_size)
-        slots = {
-            "Name 1": words[0] if len(words) > 0 else "",
-            "Name 2": words[1] if len(words) > 1 else "",
-            "Name 3": words[2] if len(words) > 2 else "",
-            "Name 4": " ".join(words[3:]) if len(words) > 3 else "",
-        }
-        m.extra = {**m.extra, **slots}
+        m.Name1 = words[0] if len(words) > 0 else ""
+        m.Name2 = words[1] if len(words) > 1 else ""
+        m.Name3 = words[2] if len(words) > 2 else ""
+        m.Name4 = " ".join(words[3:]) if len(words) > 3 else ""
         affected += 1
 
     await db.commit()

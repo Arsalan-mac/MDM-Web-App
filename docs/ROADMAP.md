@@ -412,6 +412,97 @@ Template Migration, RegisterNumber Cleansing, Delete Records.
   ("Bahnhofstr." -> "Bahnhofstraße") - confirmed by querying Postgres
   directly, not just the API response.
 
+- **SAP Template Migration - BUT000-General + ADRC-Address slice** (done) -
+  ported from sap_template_module.py, the largest module ported so far
+  (4287 lines - bigger than Tax Cleansing). It generates the actual SAP
+  Business Partner master-data migration rows from Mandanten, driven by a
+  mapping-spec DSL defined in `mapping_specs/*.map` text files. This first
+  slice covers the two sheets that need neither a materialized base table
+  nor the SPLIT/TRUNCATE overflow policies - BUT000-General (partner
+  master data: name, org/person flag, title, legal form, archiving flag)
+  and ADRC-Address (the address itself, plus a "Fehlerhafte Anschrift"
+  comment for partners Adress-Analyse flagged).
+  **Scope decisions**:
+  - The original's mapping-spec DSL is parsed from text at runtime, but
+    only because the `.map` files are meant to be hand-edited outside the
+    app (their own header comments say "Bearbeiten z. B. in VS Code") and
+    then re-ingested - there is no in-app text editor for them, confirmed
+    by reading every UI code path in the original's three tabs. That's
+    exactly the FISCAL_RULES/VAT_MAPPING/SAP_TAX_CATEGORIES pattern this
+    app already uses for reference config edited as code, not through the
+    UI - so instead of reimplementing a runtime DSL parser nothing needs,
+    the two sheets' mappings were hand-encoded as structured Python data
+    (`app/cleansing/sap_template_mappings.py`), checked field-by-field
+    against the original `.map` files (same target-field order, lengths,
+    rule types, conditions).
+  - The four materialized-table sheets (BUT100 from Rollen with RLTYP-code
+    mapping and role suppression, BUT0ID from RegisterNumber with
+    type-sniffing, BUT0IS from Branchen with first-row-per-group ISDEF
+    logic, BUT000-Append for populated-attribute partners only) and
+    DFKKBPTAXNUM (needs Tax Cleansing's TAX_MIGRATION_RESULT) are deferred
+    - each needs its own fan-out-capable builder the 1:1 mapping engine
+    can't express, and none blocks proving the engine itself end-to-end.
+  - Generation is stateless (recomputed fresh from Mandanten/JunkAddress on
+    every call), matching Tax Cleansing's migration/validation endpoints -
+    no persisted output table to go stale.
+  - REGION has no Mandant column: the original stopped exporting it in
+    2026-09-22 (the SAP cockpit rejected the Bundesland codes it used to
+    carry) and never populated `Mandanten.REGION` again after that, so
+    ADRC's REGION target field maps to a constant empty string instead of
+    a dead column.
+  - The engine is a plain per-row loop over ORM objects, not pandas
+    vectorization - this app's Projects are single-tenant workspaces, not
+    the original's 130k+-row shared database, and every other cleansing
+    service here already favors a loop over a DataFrame pipeline.
+  - Date reformatting (`Format: YYYYMMDD` etc.) is ported byte-for-byte
+    from the original's `_apply_date_format` regex approach (ISO takes
+    precedence over day-first, month 1-12/day 1-31 plausibility check) -
+    deliberately not `datetime`-parsing based, since that fails past year
+    2262 and mis-guesses mixed formats, exactly the reasoning the original
+    documents for avoiding `pd.to_datetime`.
+  - Excel export is NOT deferred this time (unlike every other stage so
+    far) - one workbook (both sheets + a red-highlighted "Violations"
+    sheet) ships in this slice, since a downloadable file is this stage's
+    actual purpose; what's deferred is the batch multi-country/CSV/
+    anonymized export from the original's Export tab, not export itself.
+  - Two Mandant column-plumbing bugs were caught and fixed while wiring
+    this up, both pre-existing gaps this slice's data finally exercised:
+    `STANDARD_MANDANT_COLUMNS` (the Load Data upload whitelist deciding
+    typed-column vs. `extra`) didn't list the four new source fields
+    (AddedDate, RoedlCompanyNumber, TitleCode, LegalFormCode), so uploaded
+    values for them silently landed in `extra` and never reached the
+    typed columns SAP Template Migration reads; and SAP-CARP's Field-
+    Mapping overwrite step resolved its target column by DB column *name*
+    but wrote via `setattr` (which needs the Python attribute *key*) -
+    harmless while every column's name and attribute matched, but Name1-4's
+    explicit `"Name 1"`-style column name (kept to match the SAP mapping
+    spec's own field reference) would have silently no-opped instead of
+    writing the field. Both fixed (`app/cleansing/constants.py`,
+    `_MANDANT_COLUMN_TO_ATTR` in `sap_carp_service.py`) before they could
+    ship as live bugs.
+  - Name 1-4 (SAP-CARP's CompanyName distribution) were promoted from
+    `Mandant.extra` to typed columns now that BUT000-General reads them
+    back, same rule FirstName/LastName followed earlier: `extra` until a
+    stage actually consumes a field, typed once one does.
+  Verified with 25 unit tests (every rule type, the date-format regex
+  cascade including implausible-date rejection, overflow flagging, the
+  JUNK_ADDRESS join) and a full live e2e run against real Postgres/Clerk
+  through the *entire* upstream pipeline - Load Data, SAP-CARP's Name 1-4
+  distribution and Name Splitting, Adress-Analyse, and Zerlegung - then
+  SAP Template Migration itself: an organisation with a Rödl company
+  number correctly got BU_GROUP=ZICO and its LEGAL_ENTY code, an inactive
+  organisation got XDELE=X, a natural person got BPKIND=1/TITLE from its
+  own TitleCode/name-split FirstName+LastName while NAME1_ORG correctly
+  stayed empty (name distribution only touches organisations), a partner
+  with an open Adress-Analyse finding got ADRC's "Fehlerhafte Anschrift"
+  comment and no Zerlegung-derived address fields, a clean organisation's
+  Zerlegung-accepted STREET/HOUSE_NUM1 and reformatted AddedDate
+  (`2026-01-15 08:00:00.000` -> `20260115`) came through exactly, a
+  deliberately oversized legal-form code was correctly flagged as a FLAG
+  overflow violation end-to-end, and the downloaded workbook opened with
+  the exact three expected sheets, red-highlighted overflow cells, and a
+  populated Violations sheet.
+
 ## Phase 3 — Productionization
 
 Azure deployment (Container Apps, Azure DB for PostgreSQL, Azure Cache for

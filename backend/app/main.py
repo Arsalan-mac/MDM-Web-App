@@ -10,6 +10,7 @@ from app.api.routers import (
     projects,
     quality,
     sap_carp,
+    sap_template,
     tax_cleansing,
     tenants,
 )
@@ -37,3 +38,4 @@ app.include_router(geisterobjekte.router)
 app.include_router(sap_carp.router)
 app.include_router(quality.router)
 app.include_router(tax_cleansing.router)
+app.include_router(sap_template.router)

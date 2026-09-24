@@ -1,5 +1,5 @@
 from app.cleansing.sap_carp_service import (
-    _WRITABLE_MANDANT_COLUMNS,
+    _MANDANT_COLUMN_TO_ATTR,
     _name_needs_llm,
     _parse_condition,
     _resolve_sap_key,
@@ -72,8 +72,15 @@ def test_name_needs_llm_skips_two_tokens():
 
 
 def test_writable_mandant_columns_excludes_system_fields():
-    assert "CompanyName" in _WRITABLE_MANDANT_COLUMNS
-    assert "IDParty" not in _WRITABLE_MANDANT_COLUMNS
-    assert "project_id" not in _WRITABLE_MANDANT_COLUMNS
-    assert "SapOverridden" not in _WRITABLE_MANDANT_COLUMNS
-    assert "extra" not in _WRITABLE_MANDANT_COLUMNS
+    assert "CompanyName" in _MANDANT_COLUMN_TO_ATTR
+    assert "IDParty" not in _MANDANT_COLUMN_TO_ATTR
+    assert "project_id" not in _MANDANT_COLUMN_TO_ATTR
+    assert "SapOverridden" not in _MANDANT_COLUMN_TO_ATTR
+    assert "extra" not in _MANDANT_COLUMN_TO_ATTR
+
+
+def test_writable_mandant_columns_maps_db_name_to_python_attr():
+    # "Name 1" is the column's DB/SAP-spec name; the Python attribute
+    # setattr() needs is "Name1" - see app/models/tenant.py.
+    assert _MANDANT_COLUMN_TO_ATTR["Name 1"] == "Name1"
+    assert _MANDANT_COLUMN_TO_ATTR["CompanyName"] == "CompanyName"

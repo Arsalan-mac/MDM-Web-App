@@ -45,6 +45,10 @@ COLUMN_ALIASES: dict[str, list[str]] = {
     "DateFounded": ["DateFounded", "Founded", "EstablishmentDate"],
     "LiquidationDate": ["LiquidationDate", "Liquidation"],
     "RegisterCourtDate": ["RegisterCourtDate", "RegistrationDate"],
+    "AddedDate": ["AddedDate", "Added_Date", "CreatedDate", "Anlagedatum"],
+    "RoedlCompanyNumber": ["RoedlCompanyNumber", "Roedl_Company_Number", "RoedlGesellschaftsnummer"],
+    "TitleCode": ["TitleCode", "Title_Code", "Titel"],
+    "LegalFormCode": ["LegalFormCode", "Legal_Form_Code", "Rechtsform", "Gesellschaftsform"],
 }
 
 

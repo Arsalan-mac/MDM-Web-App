@@ -141,11 +141,31 @@ class _MandantColumns:
     SapOverridden: Mapped[bool] = mapped_column(Boolean, default=False)
 
     # Written by SAP-CARP's Name Splitting step (natural persons only,
-    # IsOrganisation="0") - kept as typed columns rather than `extra` since
-    # that same step reads them back (candidate/cleanup queries), unlike
-    # the Name 1-4 SAP export slots below.
+    # IsOrganisation="0") - kept as typed columns since that same step
+    # reads them back (candidate/cleanup queries).
     FirstName: Mapped[str | None] = mapped_column(String(128))
     LastName: Mapped[str | None] = mapped_column(String(128))
+
+    # Written by SAP-CARP's CompanyName -> Name 1-4 distribution step. Kept
+    # in `extra` at first (nothing read them back yet - see docs/ROADMAP.md's
+    # SAP-CARP-Ueberschreibung entry); promoted to typed columns now that
+    # SAP Template Migration's BUT000-General sheet reads them. Original
+    # field names ("Name 1", not "Name1") kept via an explicit column name
+    # since they're the literal SAP mapping-spec source field references -
+    # same pattern as MandantGegner's spaced column names below.
+    Name1: Mapped[str | None] = mapped_column("Name 1", String(40))
+    Name2: Mapped[str | None] = mapped_column("Name 2", String(40))
+    Name3: Mapped[str | None] = mapped_column("Name 3", String(40))
+    Name4: Mapped[str | None] = mapped_column("Name 4", String(40))
+
+    # Read by SAP Template Migration's BUT000-General sheet. Generously
+    # sized on purpose: source data can be messier/longer than the SAP
+    # target field it feeds (TITLE/LEGAL_ENTY are 4/2 chars) - that's the
+    # overflow-FLAG mechanism's job to catch downstream, not a storage limit.
+    AddedDate: Mapped[str | None] = mapped_column(String(32))
+    RoedlCompanyNumber: Mapped[str | None] = mapped_column(String(64))
+    TitleCode: Mapped[str | None] = mapped_column(String(64))
+    LegalFormCode: Mapped[str | None] = mapped_column(String(64))
 
     # Written by Address Cleansing's Zerlegung step (SAP address
     # decomposition) - split out of `Address` into SAP's ADRC target field

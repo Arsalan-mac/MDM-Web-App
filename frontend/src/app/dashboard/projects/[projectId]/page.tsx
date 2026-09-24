@@ -22,6 +22,7 @@ const STAGE_ROUTES: Record<string, string> = {
   quality: "quality",
   tax_cleansing: "tax-cleansing",
   address_cleansing: "address-cleansing",
+  sap_template: "sap-template",
 };
 
 export default function ProjectDetailPage() {

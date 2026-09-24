@@ -749,3 +749,55 @@ export function setStageStatus(
     body: JSON.stringify({ status }),
   });
 }
+
+export type SapTemplateSheetInfo = { name: string; field_count: number };
+
+export type SapTemplateViolation = {
+  row_index: number;
+  id_party: string;
+  field: string;
+  value: string;
+  allowed_length: number;
+};
+
+export type SapTemplateSheetPreview = {
+  total: number;
+  rows: Record<string, string>[];
+  violations: SapTemplateViolation[];
+};
+
+export type SapTemplateGenerateAll = {
+  sheets: Record<string, { total: number; violation_count: number }>;
+};
+
+export function listSapTemplateSheets(token: string, projectId: string): Promise<SapTemplateSheetInfo[]> {
+  return apiFetch<SapTemplateSheetInfo[]>(`/projects/${projectId}/sap-template/sheets`, token);
+}
+
+export function previewSapTemplateSheet(
+  token: string,
+  projectId: string,
+  sheetName: string,
+  limit: number = 5,
+): Promise<SapTemplateSheetPreview> {
+  return apiFetch<SapTemplateSheetPreview>(
+    `/projects/${projectId}/sap-template/${encodeURIComponent(sheetName)}/preview?limit=${limit}`,
+    token,
+  );
+}
+
+export function generateAllSapTemplateSheets(token: string, projectId: string): Promise<SapTemplateGenerateAll> {
+  return apiFetch<SapTemplateGenerateAll>(`/projects/${projectId}/sap-template/generate`, token);
+}
+
+export async function downloadSapTemplateWorkbook(token: string, projectId: string): Promise<Blob> {
+  const response = await fetch(`${API_URL}/projects/${projectId}/sap-template/download`, {
+    headers: { Authorization: `Bearer ${token}` },
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    const body = await response.text();
+    throw new ApiError(response.status, `Download failed: ${response.status} ${body}`);
+  }
+  return response.blob();
+}
