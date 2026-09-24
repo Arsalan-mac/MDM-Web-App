@@ -72,8 +72,13 @@ class Stage(TenantBase):
     project: Mapped["Project"] = relationship(back_populates="stages")
 
 
-class Mandant(TenantBase):
-    """The client master-data table ('Mandanten' in the original app).
+class _MandantColumns:
+    """Shared column set for `mandanten` and `geisterobjekte`.
+
+    A ghost object (see GhostObject below) is exactly a Mandant snapshot
+    moved to a separate table by the Geisterobjekte stage, so both tables
+    have an identical shape - defined once here and mixed into both mapped
+    classes, rather than duplicated.
 
     Field names intentionally keep the original CamelCase business names
     (IDParty, CompanyName, ...) rather than snake_case: they are external
@@ -86,8 +91,6 @@ class Mandant(TenantBase):
     get their own column; every other column present in an uploaded file is
     preserved verbatim in `extra` so no source data is silently dropped.
     """
-
-    __tablename__ = "mandanten"
 
     # Composite PK: a tenant can run several migration Projects (unlike the
     # original app, which only ever had one workspace/DB per client), and
@@ -132,6 +135,87 @@ class Mandant(TenantBase):
     Load_Date: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     Source_FILE: Mapped[str | None] = mapped_column(String(255))
     Change_Reason: Mapped[str] = mapped_column(String(255), default="")
+
+
+class Mandant(_MandantColumns, TenantBase):
+    __tablename__ = "mandanten"
+
+
+class GhostObject(_MandantColumns, TenantBase):
+    """Quarantined Mandant records with no connection to any Auftrag,
+    ConnectedParty, or MandantGegner ('Geisterobjekte' in the original app).
+
+    Unlike the original, there's no separate ID-tracking table: a record
+    counts as quarantined simply by existing here instead of in `mandanten`.
+    The original's separate tracking table existed to detect tampering via
+    an external DB tool (someone editing the SQLite file directly) - a much
+    smaller concern for a managed Postgres backend, so it's not carried
+    forward; see app/cleansing/geisterobjekte_service.py.
+    """
+
+    __tablename__ = "geisterobjekte"
+
+
+class Auftrag(TenantBase):
+    """Client engagements/orders ('Auftraege' in the original app).
+
+    Loaded as a plain reference table (see app/cleansing/reference_tables.py)
+    - full replace per project, no column-alias mapping since these are
+    fixed source-system field names, not user-facing data needing cleanup.
+    Primarily exists so Geisterobjekte's ghost query can check "does this
+    Mandant have any orders at all"; not yet consumed by anything else.
+    """
+
+    __tablename__ = "auftraege"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    project_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("projects.id"), index=True)
+    IDProject: Mapped[str | None] = mapped_column(String(64))
+    IDParty: Mapped[str | None] = mapped_column(String(64), index=True)
+    ProjectNumber: Mapped[str | None] = mapped_column(String(64))
+    Year: Mapped[str | None] = mapped_column(String(16))
+    AssessmentYear: Mapped[str | None] = mapped_column(String(16))
+    extra: Mapped[dict] = mapped_column(JSONB, default=dict)
+    Load_Date: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    Source_FILE: Mapped[str | None] = mapped_column(String(255))
+
+
+class ConnectedParty(TenantBase):
+    """Related-party links ('VERBUNDENE_PARTEIEN' in the original app) -
+    symmetric: a Mandant is connected if it appears as either IDParty or
+    IDParty_Related on a row. Used by Geisterobjekte's ghost query.
+    """
+
+    __tablename__ = "verbundene_parteien"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    project_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("projects.id"), index=True)
+    IDParty: Mapped[str | None] = mapped_column(String(64), index=True)
+    IDParty_Related: Mapped[str | None] = mapped_column(String(64), index=True)
+    extra: Mapped[dict] = mapped_column(JSONB, default=dict)
+    Load_Date: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    Source_FILE: Mapped[str | None] = mapped_column(String(255))
+
+
+class MandantGegner(TenantBase):
+    """Opponent-party links ('MANDANT_GEGNER' in the original app) - a
+    Mandant is connected if it appears as either the client or the opponent
+    side of a row. Used by Geisterobjekte's ghost query.
+
+    Column names keep the original's literal (spaced) source field names via
+    an explicit `name=` override, since standardize_columns only renames
+    known aliases and these fixed names pass through unchanged on upload.
+    """
+
+    __tablename__ = "mandant_gegner"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    project_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("projects.id"), index=True)
+    ClientIDParty: Mapped[str | None] = mapped_column("Client - IDParty", String(64), index=True)
+    OpponentIDParty: Mapped[str | None] = mapped_column("Opponent - IDParty", String(64), index=True)
+    extra: Mapped[dict] = mapped_column(JSONB, default=dict)
+    Load_Date: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    Source_FILE: Mapped[str | None] = mapped_column(String(255))
 
 
 class JunkAddress(TenantBase):

@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routers import address_cleansing, chat, health, load_data, projects, tenants
+from app.api.routers import address_cleansing, chat, geisterobjekte, health, load_data, projects, tenants
 from app.config import get_settings
 
 settings = get_settings()
@@ -22,3 +22,4 @@ app.include_router(projects.router)
 app.include_router(load_data.router)
 app.include_router(address_cleansing.router)
 app.include_router(chat.router)
+app.include_router(geisterobjekte.router)

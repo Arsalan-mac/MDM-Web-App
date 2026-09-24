@@ -30,3 +30,10 @@ STANDARD_MANDANT_COLUMNS = [
     "WebSite", "PhoneNumber", "FaxNumber", "DateFounded", "LiquidationDate",
     "RegisterCourtDate",
 ]
+
+# Standard columns for the generic reference tables Geisterobjekte's ghost
+# query needs (app/models/tenant.py - Auftrag, ConnectedParty, MandantGegner).
+# Fixed source-system field names, not alias-mapped like Mandant's.
+AUFTRAG_COLUMNS = ["IDProject", "IDParty", "ProjectNumber", "Year", "AssessmentYear"]
+CONNECTED_PARTY_COLUMNS = ["IDParty", "IDParty_Related"]
+MANDANT_GEGNER_COLUMNS = ["Client - IDParty", "Opponent - IDParty"]

@@ -17,6 +17,7 @@ const STATUS_LABEL: Record<StageStatus, string> = {
 const STAGE_ROUTES: Record<string, string> = {
   load_data: "load-data",
   datenmodell: "datenmodell",
+  geisterobjekte: "geisterobjekte",
   address_cleansing: "address-cleansing",
 };
 

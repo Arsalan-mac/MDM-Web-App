@@ -88,6 +88,33 @@ def parse_uploaded_file(filename: str, content: bytes) -> pd.DataFrame:
     raise UnsupportedFileType(f"Unsupported file type: '{filename}' (expected .csv, .txt or .xlsx)")
 
 
+def harmonize_reference_dataframe(df: pd.DataFrame) -> pd.DataFrame:
+    """Light cleaning for generic reference tables (Auftraege, VERBUNDENE_
+    PARTEIEN, MANDANT_GEGNER, ...) - mirrors the original app's
+    load_generic_file, which is deliberately simpler than
+    load_and_harmonize_data (below): only strips whitespace from column
+    names, never mangles them (no dot/dash/space-to-underscore rewrite).
+    That mangling is fine for Mandanten's alias-mapped columns, but these
+    tables' column names are fixed source-system field names some of which
+    contain meaningful punctuation - e.g. MANDANT_GEGNER's "Client - IDParty"
+    would become "Client_IDParty" and silently stop matching its model
+    column if run through the Mandanten path instead.
+    """
+    if df.empty:
+        return df
+
+    df = df.copy()
+    df.columns = [str(col).strip() for col in df.columns]
+
+    for col in df.columns:
+        series = df[col].replace(np.nan, "").astype(str).str.strip()
+        series = series.replace(["nan", "None", "<NA>"], "")
+        series = series.str.replace(_ILLEGAL_CHARS_RE, "", regex=True)
+        df[col] = series
+
+    return df
+
+
 def harmonize_dataframe(df: pd.DataFrame) -> pd.DataFrame:
     """Clean cell values and standardize column names.
 

@@ -1,6 +1,11 @@
 import pandas as pd
 
-from app.cleansing.load_data import harmonize_dataframe, parse_uploaded_file, standardize_columns
+from app.cleansing.load_data import (
+    harmonize_dataframe,
+    harmonize_reference_dataframe,
+    parse_uploaded_file,
+    standardize_columns,
+)
 
 
 def test_standardize_columns_renames_known_aliases():
@@ -36,3 +41,17 @@ def test_harmonize_dataframe_cleans_and_standardizes():
     assert result["CompanyName"].iloc[0] == "Acme GmbH"  # whitespace trimmed
     assert result["CompanyName"].iloc[1] == "Beta AG"  # illegal control char stripped
     assert pd.isna(result["ZipCode"].iloc[1])  # "nan" string normalized to NA
+
+
+def test_harmonize_reference_dataframe_preserves_punctuated_column_names():
+    # MANDANT_GEGNER's real column names - harmonize_dataframe's Mandant-path
+    # column mangling (space/dash -> underscore) would break these; the
+    # reference-table path must leave them exactly as-is.
+    df = pd.DataFrame({
+        "Client - IDParty": [" 1 "],
+        "Opponent - IDParty": ["2\x00"],
+    })
+    result = harmonize_reference_dataframe(df)
+    assert list(result.columns) == ["Client - IDParty", "Opponent - IDParty"]
+    assert result["Client - IDParty"].iloc[0] == "1"
+    assert result["Opponent - IDParty"].iloc[0] == "2"

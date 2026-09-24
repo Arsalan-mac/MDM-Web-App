@@ -95,6 +95,19 @@ export function uploadMandanten(token: string, projectId: string, file: File): P
   return apiUpload<LoadSummary>(`/projects/${projectId}/load-data/mandanten/upload`, token, formData);
 }
 
+export type ReferenceTable = "auftraege" | "verbundene-parteien" | "mandant-gegner";
+
+export function uploadReferenceTable(
+  token: string,
+  projectId: string,
+  table: ReferenceTable,
+  file: File,
+): Promise<LoadSummary> {
+  const formData = new FormData();
+  formData.append("file", file);
+  return apiUpload<LoadSummary>(`/projects/${projectId}/load-data/${table}/upload`, token, formData);
+}
+
 export type AnalysisSummary = {
   rows_checked: number;
   findings: number;
@@ -158,6 +171,29 @@ export async function sendChatMessage(
     body: JSON.stringify({ message, history }),
   });
   return reply;
+}
+
+export type GeisterobjekteStatus = { mandant_count: number; ghost_count: number };
+
+export function getGeisterobjekteStatus(token: string, projectId: string): Promise<GeisterobjekteStatus> {
+  return apiFetch<GeisterobjekteStatus>(`/projects/${projectId}/geisterobjekte/status`, token);
+}
+
+export function quarantineGhosts(token: string, projectId: string): Promise<{ quarantined: number }> {
+  return apiFetch(`/projects/${projectId}/geisterobjekte/quarantine`, token, { method: "POST" });
+}
+
+export function restoreGhosts(
+  token: string,
+  projectId: string,
+): Promise<{ restored: number; skipped: number }> {
+  return apiFetch(`/projects/${projectId}/geisterobjekte/restore`, token, { method: "POST" });
+}
+
+export type ConsistencyFinding = { table: string; ghost_rows: number; hint: string };
+
+export function getConsistencyCheck(token: string, projectId: string): Promise<ConsistencyFinding[]> {
+  return apiFetch<ConsistencyFinding[]>(`/projects/${projectId}/geisterobjekte/consistency`, token);
 }
 
 export function setStageStatus(
