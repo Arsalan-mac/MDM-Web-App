@@ -19,7 +19,12 @@ async def run_address_analysis(db: AsyncSession, project_id: uuid.UUID) -> dict:
     that field (a fresh run supersedes the last one - matches the original
     app's "Adress-Analyse" re-run behavior).
     """
-    result = await db.execute(select(Mandant).where(Mandant.project_id == project_id))
+    # Excludes SAP-overridden records - matches address_common.load_population
+    # in the original app (Q10/Q14: everyone else is checked, inactive
+    # records included, only SAP-overridden ones are skipped).
+    result = await db.execute(
+        select(Mandant).where(Mandant.project_id == project_id, Mandant.SapOverridden.is_(False))
+    )
     mandanten = result.scalars().all()
     rows = [
         {

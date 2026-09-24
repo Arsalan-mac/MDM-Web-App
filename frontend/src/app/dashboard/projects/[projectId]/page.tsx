@@ -16,6 +16,7 @@ const STATUS_LABEL: Record<StageStatus, string> = {
 // stage is a placeholder until it's ported in Phase 2 (see docs/ROADMAP.md).
 const STAGE_ROUTES: Record<string, string> = {
   load_data: "load-data",
+  datenmodell: "datenmodell",
   address_cleansing: "address-cleansing",
 };
 

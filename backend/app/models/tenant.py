@@ -7,7 +7,7 @@ resolved per request.
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -119,6 +119,13 @@ class Mandant(TenantBase):
     DateFounded: Mapped[str | None] = mapped_column(String(32))
     LiquidationDate: Mapped[str | None] = mapped_column(String(32))
     RegisterCourtDate: Mapped[str | None] = mapped_column(String(32))
+
+    # Set by the (not-yet-ported) SAP-CARP-Ueberschreibung stage. Excluded
+    # from every downstream cleansing population, matching the original
+    # app's "Durch SAP ueberschrieben" flag (address_common.FLAG_COL) - a
+    # proper bool here rather than the original's "Ja"/"" string, since this
+    # is an internal flag we set, not a raw field from an uploaded file.
+    SapOverridden: Mapped[bool] = mapped_column(Boolean, default=False)
 
     extra: Mapped[dict] = mapped_column(JSONB, default=dict)
 

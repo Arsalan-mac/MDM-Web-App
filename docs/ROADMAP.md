@@ -64,6 +64,20 @@ One at a time, reusing the pattern established in Phase 1: Datenmodell-
 Erweiterung, Geisterobjekte, SAP-CARP, Quality/Report, Tax Cleansing, SAP
 Template Migration, RegisterNumber Cleansing, Delete Records.
 
+- **Datenmodell-Erweiterung** (done) - the original's whole reason to exist
+  (dynamically adding columns at a precise position) is a SQLite-only
+  problem; Postgres just does `ALTER TABLE ADD COLUMN`, so there's no
+  dynamic column editor here. What actually carried forward: a proper
+  `SapOverridden` bool on `Mandant` (replaces the original's `"Ja"`/`""`
+  string flag - set by the not-yet-built SAP-CARP stage, already wired into
+  Address Cleansing's population filter, matching `address_common.
+  load_population`'s real behavior, which had been silently missing this
+  exclusion since Load Data was built). The "add a custom column" feature
+  needs no UI at all - `Mandant.extra` already covers it. The page is
+  informational (what's reserved, what's planned) plus a mark-done action.
+  Verified: flagging a record `SapOverridden` and re-running Adress-Analyse
+  correctly dropped it from the checked population and its finding.
+
 ## Phase 3 — Productionization
 
 Azure deployment (Container Apps, Azure DB for PostgreSQL, Azure Cache for

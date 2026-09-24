@@ -159,3 +159,15 @@ export async function sendChatMessage(
   });
   return reply;
 }
+
+export function setStageStatus(
+  token: string,
+  projectId: string,
+  stageKey: string,
+  status: StageStatus,
+): Promise<Stage> {
+  return apiFetch<Stage>(`/projects/${projectId}/stages/${stageKey}`, token, {
+    method: "PATCH",
+    body: JSON.stringify({ status }),
+  });
+}
