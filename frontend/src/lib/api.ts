@@ -15,6 +15,14 @@ export type Project = {
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
+export class ApiError extends Error {
+  status: number;
+  constructor(status: number, message: string) {
+    super(message);
+    this.status = status;
+  }
+}
+
 async function apiFetch<T>(path: string, token: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${API_URL}${path}`, {
     ...init,
@@ -28,7 +36,7 @@ async function apiFetch<T>(path: string, token: string, init?: RequestInit): Pro
 
   if (!response.ok) {
     const body = await response.text();
-    throw new Error(`API ${path} failed: ${response.status} ${body}`);
+    throw new ApiError(response.status, `API ${path} failed: ${response.status} ${body}`);
   }
 
   return response.json() as Promise<T>;
@@ -133,6 +141,21 @@ export async function acceptAddressFinding(token: string, projectId: string, fin
   );
   if (!response.ok) {
     const body = await response.text();
-    throw new Error(`Accept failed: ${response.status} ${body}`);
+    throw new ApiError(response.status, `Accept failed: ${response.status} ${body}`);
   }
+}
+
+export type ChatTurn = { role: "user" | "assistant"; content: string };
+
+export async function sendChatMessage(
+  token: string,
+  projectId: string,
+  message: string,
+  history: ChatTurn[],
+): Promise<string> {
+  const { reply } = await apiFetch<{ reply: string }>(`/projects/${projectId}/chat`, token, {
+    method: "POST",
+    body: JSON.stringify({ message, history }),
+  });
+  return reply;
 }

@@ -38,8 +38,20 @@ Claude-powered "talk to your data" agent.
     original app's one-workspace-per-client model - initially missed when
     Load Data was built, caught and fixed before Address Cleansing could
     inherit the same gap).
-- 1d. Chat-with-data agent v1: Claude API tool use, a handful of curated
-  read-only tools scoped to one tenant+project, chat panel in the UI.
+- 1d. Chat-with-data agent v1 (done) - Claude API (`claude-opus-5`) via the
+  Tool Runner (`client.beta.messages.tool_runner`, `anthropic` SDK 1.8.0),
+  hosted in this backend rather than Managed Agents so it runs inside the
+  same tenant-scoped session and auth context as everything else. Five
+  read-only tools scoped to one tenant+project via closures (the model
+  supplies a search query or record id, never the tenant/project boundary
+  itself): pipeline status, Address Cleansing findings summary, Mandanten
+  search, per-record finding detail, and a Mandanten count. No write tools -
+  the agent explains what Accept/Nacharbeit would do rather than doing it.
+  Conversation history is kept client-side (plain text turns resent each
+  request), not persisted server-side. Verified: the five tools' query logic
+  tested directly against real Postgres data (correct in every case); the
+  actual Claude round-trip is untested pending a real `ANTHROPIC_API_KEY`
+  (the 503 "not configured" guard was verified instead).
 
 ## Phase 2 — Port the remaining pipeline stages
 

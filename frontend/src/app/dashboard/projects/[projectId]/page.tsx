@@ -48,6 +48,9 @@ export default function ProjectDetailPage() {
       {project && (
         <>
           <h1>{project.name}</h1>
+          <p>
+            <Link href={`/dashboard/projects/${projectId}/chat`}>💬 Talk to your data</Link>
+          </p>
           <ol style={{ listStyle: "none", padding: 0 }}>
             {project.stages.map((stage) => {
               const route = STAGE_ROUTES[stage.key];
