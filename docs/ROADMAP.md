@@ -13,6 +13,25 @@ Claude-powered "talk to your data" agent.
 - 1b. Multi-tenancy core: `Tenant` model (mapped to a Clerk Organization),
   schema-per-tenant provisioning, `Project`/`Stage` model encoding the fixed
   pipeline and its locking rules.
+  **Bug fixed later (found while taking product screenshots)**: creating a
+  new Clerk Organization via the `OrganizationSwitcher` never called
+  `POST /tenants/provision` - nothing in the frontend did, so a brand-new
+  org hit a dead end ("This organization has not been provisioned yet")
+  with no way to recover short of calling the API directly. Fixed by having
+  the dashboard call `provisionTenant` (already idempotent) itself before
+  every projects fetch - covers org creation and switching to any org
+  created elsewhere, not just the one creation path. Surfaced a second,
+  related bug in the same fix: Clerk auto-generates org slugs with hyphens
+  (e.g. `acme-corp-1790269034013731139`), but the backend's tenant-slug
+  validator only allows `[a-z0-9_]` (it becomes an unquoted Postgres schema
+  name, so this is a hard security boundary, not cosmetic) - every prior
+  manual test of this flow had quietly sidestepped it by hand-picking an
+  underscored slug instead of using Clerk's real one. Fixed with a
+  `sanitizeTenantSlug` helper (hyphens/other chars -> underscore) in the
+  frontend rather than loosening the backend's validation. Verified against
+  a real, never-provisioned Clerk org with its actual hyphenated slug: the
+  dashboard now provisions it automatically (schema created, Tenant row
+  correctly slugified) and loading it twice doesn't create a duplicate.
 - 1c. First pipeline slice ported end-to-end:
   - **Load Data** (done) - Mandanten Initial Load: parse/standardize/clean,
     full-replace into the tenant's `mandanten` table, marks the stage done.

@@ -1,12 +1,14 @@
 "use client";
 
-import { useAuth } from "@clerk/nextjs";
+import { useAuth, useOrganization, useUser } from "@clerk/nextjs";
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { createProject, fetchProjects, type Project } from "@/lib/api";
+import { createProject, fetchProjects, provisionTenant, sanitizeTenantSlug, type Project } from "@/lib/api";
 
 export default function DashboardPage() {
   const { getToken, orgId, isLoaded } = useAuth();
+  const { organization, isLoaded: orgIsLoaded } = useOrganization();
+  const { user } = useUser();
   const [projects, setProjects] = useState<Project[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [newName, setNewName] = useState("");
@@ -14,8 +16,18 @@ export default function DashboardPage() {
 
   async function reload() {
     const token = await getToken();
-    if (!token) return;
+    if (!token || !organization) return;
     try {
+      // Idempotent - a no-op for an already-provisioned org. Covers every
+      // path that lands here with an active-but-unprovisioned org (just
+      // created one via the OrganizationSwitcher, switched to one created
+      // elsewhere, ...) without needing to hook Clerk's own create flow.
+      await provisionTenant(
+        token,
+        organization.name,
+        sanitizeTenantSlug(organization.slug ?? organization.id),
+        user?.primaryEmailAddress?.emailAddress ?? "",
+      );
       setProjects(await fetchProjects(token));
       setError(null);
     } catch (err) {
@@ -24,11 +36,11 @@ export default function DashboardPage() {
   }
 
   useEffect(() => {
-    if (isLoaded && orgId) {
+    if (isLoaded && orgId && orgIsLoaded) {
       reload();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isLoaded, orgId]);
+  }, [isLoaded, orgId, orgIsLoaded]);
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
@@ -62,11 +74,7 @@ export default function DashboardPage() {
     <main style={{ padding: "3rem", maxWidth: 640, margin: "0 auto" }}>
       <h1>Projects</h1>
 
-      {error && (
-        <p style={{ color: "crimson" }}>
-          {error} — has this organization been provisioned yet? (POST /tenants/provision)
-        </p>
-      )}
+      {error && <p style={{ color: "crimson" }}>{error}</p>}
 
       <form onSubmit={handleCreate} style={{ display: "flex", gap: "0.5rem", margin: "1rem 0" }}>
         <input

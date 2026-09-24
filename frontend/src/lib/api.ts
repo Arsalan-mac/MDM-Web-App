@@ -79,6 +79,22 @@ export function provisionTenant(token: string, name: string, slug: string, email
   });
 }
 
+/** Backend's tenant slug is a hard security boundary (it becomes part of an
+ * unquoted Postgres schema name) and only allows lowercase alphanumeric/
+ * underscore - but Clerk's auto-generated org slugs use hyphens (e.g.
+ * "acme-corp-1790269034013731139"), so a raw Clerk slug is rejected by
+ * /tenants/provision. Sanitize before sending. */
+export function sanitizeTenantSlug(input: string): string {
+  const cleaned = input
+    .toLowerCase()
+    .replace(/[^a-z0-9_]/g, "_")
+    .replace(/_+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 60)
+    .replace(/^_+|_+$/g, "");
+  return cleaned || "org";
+}
+
 export function getProject(token: string, projectId: string): Promise<Project> {
   return apiFetch<Project>(`/projects/${projectId}`, token);
 }
