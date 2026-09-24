@@ -482,6 +482,56 @@ export function runVatDuplicateCheck(token: string, projectId: string): Promise<
   });
 }
 
+export type FiscalRule = {
+  country_code: string;
+  entity_type: string;
+  sap_code: string | null;
+  regex: string;
+  aliases: string[];
+  description: string;
+  source_url: string | null;
+  confidence: string;
+};
+
+export function getFiscalRules(token: string, projectId: string): Promise<FiscalRule[]> {
+  return apiFetch<FiscalRule[]>(`/projects/${projectId}/tax-cleansing/fiscal-rules`, token);
+}
+
+export function saveFiscalRules(
+  token: string,
+  projectId: string,
+  rules: FiscalRule[],
+): Promise<{ saved: number }> {
+  return apiFetch(`/projects/${projectId}/tax-cleansing/fiscal-rules`, token, {
+    method: "POST",
+    body: JSON.stringify({ rules }),
+  });
+}
+
+export function resetFiscalRules(token: string, projectId: string): Promise<{ rule_count: number }> {
+  return apiFetch(`/projects/${projectId}/tax-cleansing/fiscal-rules/reset`, token, { method: "POST" });
+}
+
+export type FiscalJunkRow = {
+  id_party: string;
+  company_name: string | null;
+  is_organisation: string | null;
+  is_individual: string | null;
+  is_inactive: string | null;
+  country_code: string | null;
+  fiscal_code: string;
+  reason: string;
+  allowed_pattern: string;
+};
+
+export type FiscalCodeAnalysisResult = { junk: FiscalJunkRow[]; quality_report: QualityReportRow[] };
+
+export function runFiscalCodeAnalysis(token: string, projectId: string): Promise<FiscalCodeAnalysisResult> {
+  return apiFetch<FiscalCodeAnalysisResult>(`/projects/${projectId}/tax-cleansing/fiscal-code/analyze`, token, {
+    method: "POST",
+  });
+}
+
 export function setStageStatus(
   token: string,
   projectId: string,

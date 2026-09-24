@@ -326,3 +326,34 @@ class FieldMapping(TenantBase):
     extra: Mapped[dict] = mapped_column(JSONB, default=dict)
     Load_Date: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     Source_FILE: Mapped[str | None] = mapped_column(String(255))
+
+
+class FiscalRule(TenantBase):
+    """Editable country/entity-type FiscalCode format rule ('FISCAL_RULES' in
+    the original app), used by Tax Cleansing's Steuernummer-Cleansing check.
+
+    Scoped per-project (like FieldMapping/SapStammdaten) rather than shared
+    across a tenant's projects - this codebase has no existing concept of
+    tenant-wide shared config, and the original's own scope was one ruleset
+    per workspace, which a Project is the closest match to here. Lazily
+    seeded from FISCAL_RULES_SEED (app/cleansing/fiscal_rules_seed.py) the
+    first time a project's rules are read, exactly like the original's
+    ensure_fiscal_rules_table.
+    """
+
+    __tablename__ = "fiscal_rules"
+    __table_args__ = (
+        UniqueConstraint("project_id", "CountryCode", "EntityType", name="uq_fiscal_rule_project_country_entity"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    project_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("projects.id"), index=True)
+    CountryCode: Mapped[str] = mapped_column(String(4))
+    EntityType: Mapped[str] = mapped_column(String(16))  # ORG | IND | GENERIC
+    SapCode: Mapped[str | None] = mapped_column(String(16))
+    Regex: Mapped[str] = mapped_column(Text)
+    RegexAliases: Mapped[list] = mapped_column(JSONB, default=list)
+    Description: Mapped[str] = mapped_column(Text, default="")
+    SourceUrl: Mapped[str | None] = mapped_column(String(512))
+    Confidence: Mapped[str] = mapped_column(String(8), default="HIGH")  # HIGH | MEDIUM | LOW
+    Load_Date: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

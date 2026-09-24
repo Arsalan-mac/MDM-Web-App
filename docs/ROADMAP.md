@@ -267,6 +267,48 @@ Template Migration, RegisterNumber Cleansing, Delete Records.
   Natuerliche-Person split (9 vs. 3 records, exact valid/junk/empty
   counts) matched a hand-computed expectation exactly.
 
+- **Tax Cleansing - Steuernummer-Cleansing (Fiscal Code) phase** (done) -
+  ported from tax_cleansing_module.py's remaining two Steuernummer-
+  Cleansing sub-tabs: `run_fiscal_code_analysis` (2-stage syntax + country/
+  entity-type pattern check) and the Regelwerk rules editor (list/upsert/
+  reset backed by the FISCAL_RULES table). The ~460-line, 90-country
+  `_get_sap_fiscal_rules()` seed dict was extracted programmatically
+  (`ast.literal_eval` on the original function's return value, verified to
+  match byte-for-byte) into `app/cleansing/fiscal_rules_seed.py` rather
+  than retyped by hand - this is real tax-ID validation data, and a
+  transcription slip in a regex is a correctness bug a human reviewer is
+  unlikely to catch by reading a diff.
+  **Scope decisions**: `FiscalRule` is scoped per-project (like
+  SapStammdaten/FieldMapping), lazily seeded from the code defaults on
+  first read - this codebase has no tenant-wide shared-config concept, and
+  a Project is the closest match to the original's one-ruleset-per-
+  workspace scope. The official "SAP Tax Number Categories" reference
+  list shown read-only in the original's Regelwerk tab isn't ported here -
+  it exists solely to back TAXTYPE validation in Migration Preparation
+  (confirmed by reading `validate_taxtypes_against_categories`, which
+  checks `TAX_MIGRATION_RESULT`, not FiscalCode), so displaying it in this
+  phase would be a UI element with nothing yet connected to it; it lands
+  with Migration Preparation instead. Excel import/export for the rules
+  editor is deferred, consistent with every other stage's Excel-export
+  deferral so far - the editor supports view/edit/reset without it. The
+  editor's filter (country search) only affects what's *displayed*, not
+  what's saved - the original's Streamlit data_editor conflated the two
+  (editing happens on the filtered view, so "Save" only persists whatever
+  rows the filter happened to show), which reads as an artifact of that
+  widget rather than an intentional design worth reproducing.
+  Verified end-to-end against real Postgres/Clerk with an 8-Mandant
+  dataset: GET auto-seeded exactly 270 rules (90 countries x 3 entity
+  types); a 10-digit German FiscalCode validated against the seeded DE
+  ORG rule while a too-short and a wrong-length value were correctly
+  flagged (with the exact expected description text echoed back as the
+  junk reason); an Italian Codice Fiscale validated against its primary
+  regex and an 11-digit value validated via its alias regex; a record from
+  a country with no seeded rule was correctly left unflagged rather than
+  junked; upserting a looser DE ORG regex immediately changed the next
+  analysis run's result (the previously-flagged record passed); and
+  resetting reverted to the code defaults and restored the original junk
+  finding exactly.
+
 ## Phase 3 — Productionization
 
 Azure deployment (Container Apps, Azure DB for PostgreSQL, Azure Cache for

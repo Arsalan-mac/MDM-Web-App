@@ -1,21 +1,24 @@
-"""Tax Cleansing - Phase A: VAT-Cleansing tab only (unified VAT analysis,
-duplicate check, quality report). Ported from tax_cleansing_module.py's
-run_unified_vat_analysis / run_vat_duplicate_analysis / _run_vat_summary_report.
+"""Tax Cleansing: VAT-Cleansing and Steuernummer-Cleansing (Fiscal Code)
+tabs. Ported from tax_cleansing_module.py's run_unified_vat_analysis /
+run_vat_duplicate_analysis / run_fiscal_code_analysis and the FISCAL_RULES
+DB layer (ensure_fiscal_rules_table, load_fiscal_rules_from_db, the
+Regelwerk editor's save/reset actions).
 
-Fiscal Code (Steuernummer-Cleansing) and Migration Preparation are separate,
-larger follow-up phases - see docs/ROADMAP.md.
+Migration Preparation (TAXTYPE validation/remap/collision-fix, SAP sync)
+is a separate, larger follow-up phase - see docs/ROADMAP.md.
 """
 
 import re
 import uuid
 
-from sqlalchemy import select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.cleansing.constants import MANDANT_VAT_COL
+from app.cleansing.fiscal_rules_seed import FISCAL_RULES_SEED
 from app.cleansing.quality_report import compute_quality_report
 from app.cleansing.vat_rules import VAT_RULES, clean_norwegian_vat, clean_swiss_vat, clean_tax_number, split_russian_tax_number
-from app.models.tenant import Mandant
+from app.models.tenant import FiscalRule, Mandant
 
 _PLACEHOLDER_TOKENS = ("?", "*", "!", "TBA", "PENDING", "UNKNOWN")
 _STRIP_NON_ALNUM_RE = re.compile(r"[^A-Z0-9Ñ&]")
@@ -192,3 +195,163 @@ async def run_vat_duplicate_check(db: AsyncSession, project_id: uuid.UUID) -> li
         for m in group:
             dupes.append({"id_party": m.IDParty, "company_name": m.CompanyName, "vat_number": m.VATNumber})
     return dupes
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# FISCAL_RULES: per-project, editable country/entity-type FiscalCode rules
+# ─────────────────────────────────────────────────────────────────────────
+
+
+async def _seed_fiscal_rules(db: AsyncSession, project_id: uuid.UUID) -> None:
+    for country, entities in FISCAL_RULES_SEED.items():
+        for entity_type, rule in entities.items():
+            desc = rule.get("desc", "")
+            if "[LOW confidence]" in desc:
+                confidence = "LOW"
+            elif "[MEDIUM confidence]" in desc:
+                confidence = "MEDIUM"
+            else:
+                confidence = "HIGH"
+            db.add(
+                FiscalRule(
+                    project_id=project_id,
+                    CountryCode=country,
+                    EntityType=entity_type,
+                    SapCode=rule.get("sap_code", ""),
+                    Regex=rule.get("regex", r"^.+$"),
+                    RegexAliases=rule.get("aliases", []),
+                    Description=desc,
+                    SourceUrl=rule.get("source", ""),
+                    Confidence=confidence,
+                )
+            )
+    await db.commit()
+
+
+async def ensure_fiscal_rules(db: AsyncSession, project_id: uuid.UUID) -> None:
+    """Seeds this project's rules from FISCAL_RULES_SEED the first time
+    they're needed - mirrors the original's lazy ensure_fiscal_rules_table."""
+    count = (
+        await db.execute(select(func.count()).select_from(FiscalRule).where(FiscalRule.project_id == project_id))
+    ).scalar_one()
+    if count == 0:
+        await _seed_fiscal_rules(db, project_id)
+
+
+async def list_fiscal_rules(db: AsyncSession, project_id: uuid.UUID) -> list[FiscalRule]:
+    await ensure_fiscal_rules(db, project_id)
+    result = await db.execute(
+        select(FiscalRule).where(FiscalRule.project_id == project_id).order_by(FiscalRule.CountryCode, FiscalRule.EntityType)
+    )
+    return list(result.scalars().all())
+
+
+async def upsert_fiscal_rules(db: AsyncSession, project_id: uuid.UUID, rules: list[dict]) -> int:
+    """Adds or updates rules by (country_code, entity_type) - mirrors the
+    Regelwerk editor's "Aenderungen speichern" upsert. A rule dict:
+    country_code, entity_type, sap_code, regex, aliases, description,
+    source_url, confidence."""
+    await ensure_fiscal_rules(db, project_id)
+    existing_result = await db.execute(select(FiscalRule).where(FiscalRule.project_id == project_id))
+    existing = {(r.CountryCode, r.EntityType): r for r in existing_result.scalars().all()}
+
+    saved = 0
+    for r in rules:
+        cc = (r.get("country_code") or "").strip().upper()
+        et = (r.get("entity_type") or "").strip().upper()
+        if not cc or not et:
+            continue
+        row = existing.get((cc, et))
+        if row is None:
+            row = FiscalRule(project_id=project_id, CountryCode=cc, EntityType=et)
+            db.add(row)
+            existing[(cc, et)] = row
+        row.SapCode = r.get("sap_code") or ""
+        row.Regex = r.get("regex") or r"^.+$"
+        row.RegexAliases = r.get("aliases") or []
+        row.Description = r.get("description") or ""
+        row.SourceUrl = r.get("source_url") or ""
+        row.Confidence = r.get("confidence") or "HIGH"
+        saved += 1
+
+    await db.commit()
+    return saved
+
+
+async def reset_fiscal_rules(db: AsyncSession, project_id: uuid.UUID) -> int:
+    await db.execute(delete(FiscalRule).where(FiscalRule.project_id == project_id))
+    await db.commit()
+    await _seed_fiscal_rules(db, project_id)
+    result = await db.execute(
+        select(func.count()).select_from(FiscalRule).where(FiscalRule.project_id == project_id)
+    )
+    return result.scalar_one()
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# Fiscal Code (Steuernummer) analysis: 2-stage syntax + pattern check
+# against this project's FiscalRule table.
+# ─────────────────────────────────────────────────────────────────────────
+
+_TRUE_STRINGS = ("1", "1.0", "true", "True")
+
+
+async def run_fiscal_code_analysis(db: AsyncSession, project_id: uuid.UUID) -> dict:
+    await ensure_fiscal_rules(db, project_id)
+    rules_result = await db.execute(select(FiscalRule).where(FiscalRule.project_id == project_id))
+    rules_by_country: dict[str, dict[str, FiscalRule]] = {}
+    for r in rules_result.scalars().all():
+        rules_by_country.setdefault(r.CountryCode, {})[r.EntityType] = r
+
+    result = await db.execute(select(Mandant).where(Mandant.project_id == project_id))
+    mandanten = list(result.scalars().all())
+
+    junk: list[dict] = []
+    valid_entries: list[tuple[Mandant, str, str]] = []
+
+    for m in mandanten:
+        if _is_clean(m.FiscalCode):
+            continue
+        fc_raw = m.FiscalCode.strip().upper()
+        cc = (m.CountryCode or "").strip().upper()
+        fc_clean = re.sub(r"[^A-Z0-9]", "", clean_tax_number(fc_raw, country=cc))
+
+        reason = None
+        if len(fc_clean) < 5:
+            reason = "Too Short (< 5 chars)"
+        elif len(fc_clean) > 20:
+            reason = "Too Long (> 20 chars)"
+        elif set(fc_clean) == {"0"}:
+            reason = "Placeholder (nur Nullen)"
+        elif any(tok in fc_raw for tok in _PLACEHOLDER_TOKENS):
+            reason = "Contains Invalid Characters/Placeholders"
+
+        if reason:
+            junk.append({**_base_fields(m), "fiscal_code": fc_raw, "reason": reason, "allowed_pattern": ""})
+            continue
+        valid_entries.append((m, fc_clean, cc))
+
+    for m, clean_code, cc in valid_entries:
+        if not cc or cc not in rules_by_country:
+            continue
+        is_org = str(m.IsOrganisation or "").strip() in _TRUE_STRINGS
+        is_ind = str(m.IsIndividual or "").strip() in _TRUE_STRINGS
+        entity_type = "ORG" if is_org else ("IND" if is_ind else "GENERIC")
+        rule = rules_by_country[cc].get(entity_type)
+        if rule is None:
+            continue
+
+        primary_ok = bool(re.match(rule.Regex, clean_code))
+        alias_ok = any(re.match(alt, clean_code) for alt in (rule.RegexAliases or []))
+        if not (primary_ok or alias_ok):
+            reason = "Leer nach Bereinigung" if len(clean_code) == 0 else f"Ungueltiges Pattern (Erwartet: {rule.Description})"
+            junk.append(
+                {**_base_fields(m), "fiscal_code": m.FiscalCode.strip().upper(), "reason": reason, "allowed_pattern": rule.Regex}
+            )
+
+    junk_ids = {j["id_party"] for j in junk}
+    empty_ids = {m.IDParty for m in mandanten if _is_clean(m.FiscalCode)}
+    rows = [{"IDParty": m.IDParty, "IsOrganisation": m.IsOrganisation, "IsIndividual": m.IsIndividual} for m in mandanten]
+    quality_report = compute_quality_report(rows, junk_ids, empty_ids, optional_field=True)
+
+    return {"junk": junk, "quality_report": quality_report}
