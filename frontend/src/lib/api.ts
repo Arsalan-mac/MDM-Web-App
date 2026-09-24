@@ -853,3 +853,43 @@ export function acceptRegisterCleansing(
     body: JSON.stringify({ confidences }),
   });
 }
+
+export type DeleteRecordsTableInfo = {
+  table: string;
+  columns: string[];
+  clearable_columns: string[];
+};
+
+export function listDeleteRecordsTables(token: string, projectId: string): Promise<DeleteRecordsTableInfo[]> {
+  return apiFetch<DeleteRecordsTableInfo[]>(`/projects/${projectId}/delete-records/tables`, token);
+}
+
+export function clearAllRows(
+  token: string,
+  projectId: string,
+  table: string,
+  columns: string[],
+): Promise<{ updated: number }> {
+  return apiFetch(`/projects/${projectId}/delete-records/clear-all`, token, {
+    method: "POST",
+    body: JSON.stringify({ table, columns }),
+  });
+}
+
+export function clearRowsByIds(
+  token: string,
+  projectId: string,
+  table: string,
+  columns: string[],
+  excelIdCol: string,
+  dbIdCol: string,
+  file: File,
+): Promise<{ updated: number }> {
+  const formData = new FormData();
+  formData.append("table", table);
+  for (const c of columns) formData.append("columns", c);
+  formData.append("excel_id_col", excelIdCol);
+  formData.append("db_id_col", dbIdCol);
+  formData.append("file", file);
+  return apiUpload(`/projects/${projectId}/delete-records/clear-by-ids`, token, formData);
+}

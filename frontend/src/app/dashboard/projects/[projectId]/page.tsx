@@ -24,6 +24,7 @@ const STAGE_ROUTES: Record<string, string> = {
   address_cleansing: "address-cleansing",
   sap_template: "sap-template",
   register_clean: "register-cleansing",
+  delete: "delete-records",
 };
 
 export default function ProjectDetailPage() {

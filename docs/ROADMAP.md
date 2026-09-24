@@ -551,6 +551,55 @@ Template Migration, RegisterNumber Cleansing, Delete Records.
   on Mandant after an "accept all HIGH" - confirmed by querying Postgres
   directly.
 
+- **Delete Records** (done) - ported from 2202MandantenCleansing.py::
+  app_delete_ui, the final stage in the v1 pipeline. Nullifies selected
+  column values, either across all rows of a table or only for rows
+  matching an uploaded ID list - rows are never physically removed, only
+  field values, matching the original's own explicit design. A generic
+  admin tool rather than domain logic: pick a table, pick the columns to
+  clear, pick a mode, confirm, execute.
+  **Scope/safety decisions, all a consequence of this being the one
+  genuinely destructive-write feature ported so far**:
+  - Table and column names come from this app's own SQLAlchemy metadata
+    (`TenantBase.metadata.tables`), not a raw "list what's in the
+    database" query - there's no possibility of an arbitrary user-created
+    table here, unlike the original's SQLite file. Every table/column name
+    is validated against that metadata before any query is built, so nothing
+    from client input ever reaches SQL as an unvalidated string - stricter
+    than the original's own f-string SQL construction (which only got away
+    with it because its dropdowns were themselves populated from a real
+    `PRAGMA table_info` call).
+  - `project_id` and each table's own primary-key column(s) are excluded
+    from the *clearable* column list (nulling either breaks tenant/project
+    scoping or the row's own identity - and would be rejected by Postgres's
+    NOT NULL constraint anyway, but excluding them from the picker is
+    clearer than surfacing that as a runtime error) - but not from the
+    *matching* column list for ID-list mode, where matching by a primary
+    key like IDParty is exactly the point.
+  - Every operation is additionally scoped to the current project - a
+    boundary the original never needed (its SQLite file WAS one client's
+    entire workspace; this app's tenant schema holds several projects'
+    data side by side). Verified explicitly in the live e2e test: clearing
+    a column in one project left an identically-named column, on the same
+    table, in a sibling project within the same tenant, untouched.
+  - `projects`/`stages` (this app's own pipeline-management tables) are
+    excluded from the table picker entirely - not data a user should be
+    able to reach through this tool.
+  This completes the v1 pipeline: Load Data, Datenmodell-Erweiterung,
+  Geisterobjekte, SAP-CARP-Ueberschreibung, Quality Analysis, Tax
+  Cleansing, Adress-Cleansing (Adress-Analyse + Zerlegung), SAP Template
+  Migration (first slice), RegisterNumber Cleansing, and now Delete
+  Records - every stage in `PIPELINE_STAGES` has a real implementation.
+  Verified with 11 unit tests (table/column introspection, every
+  validation-rejection path) and a live e2e run against real Postgres/
+  Clerk with two projects in one tenant: clearing VATNumber for every row
+  of one project's Mandanten correctly left the other project's row (same
+  table, same column) untouched; clearing FiscalCode for an uploaded
+  single-ID list correctly touched only that one matching row and left a
+  second row in the same project alone; and attempts to clear an unknown
+  table, `project_id`, or a primary-key column were all correctly rejected
+  with a 400 before any query ran.
+
 ## Phase 3 — Productionization
 
 Azure deployment (Container Apps, Azure DB for PostgreSQL, Azure Cache for

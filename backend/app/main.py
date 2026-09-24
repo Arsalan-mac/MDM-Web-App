@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.routers import (
     address_cleansing,
     chat,
+    delete_records,
     geisterobjekte,
     health,
     load_data,
@@ -41,3 +42,4 @@ app.include_router(quality.router)
 app.include_router(tax_cleansing.router)
 app.include_router(sap_template.router)
 app.include_router(register_cleansing.router)
+app.include_router(delete_records.router)
