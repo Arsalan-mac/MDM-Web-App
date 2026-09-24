@@ -506,3 +506,34 @@ class TaxtypeRowFix(TenantBase):
     SourceCode: Mapped[str] = mapped_column(String(8))
     TargetCode: Mapped[str] = mapped_column(String(8))
     Load_Date: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class RegisterCleansingResult(TenantBase):
+    """Proposals from RegisterNumber Cleansing ('REGISTER_CLEANSING_RESULT'
+    in the original app) - standardizes Mandant.RegisterNumber via a
+    two-stage pipeline: Stufe 2 deterministic prefix/whitespace
+    normalization ("HRB3792" -> "HRB 3792"), then Stufe 3 Claude Haiku
+    cleanup for special forms (legacy "HRN" prefix, embedded court text)
+    that Stufe 2 can't handle. Junk values (Quality Analysis's Register-Nr.
+    check, app/cleansing/register_checks.py) are excluded entirely - this
+    stage only ever proposes a change for a value that's already usable,
+    never invents a number for one that isn't.
+    """
+
+    __tablename__ = "register_cleansing_result"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    project_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("projects.id"), index=True)
+    IDParty: Mapped[str] = mapped_column(String(64), index=True)
+
+    CompanyName: Mapped[str | None] = mapped_column(Text)
+    CountryCode: Mapped[str | None] = mapped_column(String(10))
+    RegisterCity: Mapped[str] = mapped_column(String(128), default="")
+
+    RegisterNumber_Alt: Mapped[str] = mapped_column(String(64))
+    RegisterNumber_Neu: Mapped[str] = mapped_column(String(64))
+    Stufe: Mapped[str] = mapped_column(String(16))  # STANDARD | LLM
+    Confidence: Mapped[str] = mapped_column(String(16))  # HIGH | MEDIUM | LOW
+    Begruendung: Mapped[str] = mapped_column(Text, default="")
+
+    Load_Date: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

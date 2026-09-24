@@ -23,6 +23,7 @@ const STAGE_ROUTES: Record<string, string> = {
   tax_cleansing: "tax-cleansing",
   address_cleansing: "address-cleansing",
   sap_template: "sap-template",
+  register_clean: "register-cleansing",
 };
 
 export default function ProjectDetailPage() {

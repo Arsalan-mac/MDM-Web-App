@@ -503,6 +503,54 @@ Template Migration, RegisterNumber Cleansing, Delete Records.
   the exact three expected sheets, red-highlighted overflow cells, and a
   populated Violations sheet.
 
+- **RegisterNumber Cleansing** (done) - ported from register_cleansing_
+  module.py, a much smaller stage (558 lines) than the two before it.
+  Standardizes `Mandant.RegisterNumber` in two stages: deterministic
+  prefix/whitespace normalization ("HRB3792" -> "HRB 3792", any of DE's
+  Handels-/Vereins-/Partnerschaftsregister prefixes plus AT's Firmenbuch
+  "FN"), then a Claude Haiku pass for special forms Stufe 2 can't handle
+  (the legacy "HRN" prefix - "HRN 227565 B" -> "HRB 227565", trailing B/A
+  = Handelsregister department -> HRB/HRA - and embedded court/location
+  text like "HRB 71290 Amtsgericht Frankfurt" -> "HRB 71290"), each with a
+  digit-preservation validation guard against hallucination, same pattern
+  as SAP-CARP's Name Splitting and Zerlegung's LLM fallback. Proposals are
+  reviewed and explicitly accepted, never auto-applied.
+  Stufe 1 (junk detection) needed no porting at all: `register_number_
+  issues` already lives in `app/cleansing/register_checks.py`, ported
+  verbatim during Quality Analysis specifically anticipating this stage's
+  need for it (its own docstring already said so) - confirming the
+  original's "single source of truth" comment held up across two separate
+  porting passes months apart.
+  **Scope decisions**: `accept_cleansing` deletes accepted proposals from
+  the list (this app's Nacharbeit/Zerlegung precedent) rather than the
+  original's behavior of leaving them visible after being applied - a
+  stale already-applied row sitting there forever read as a rough edge in
+  the original, not a feature worth preserving. The value-level dedup the
+  original uses before classification and before the LLM call (many
+  Mandanten can share an identical junk/canonical value) is kept only
+  where it still earns its keep - deduplicating before the LLM batch call,
+  to avoid asking Claude the same question twice - and dropped for
+  classification itself, which now runs directly per Mandant; this app's
+  per-project datasets are nowhere near the original's 130k+-row scale,
+  so the extra bookkeeping wasn't worth it. No LLM result cache table
+  either, matching every other LLM-backed stage ported so far.
+  Two real, previously-latent bugs surfaced and were fixed while building
+  the live e2e test for the *previous* stage's work (SAP Template
+  Migration) rather than this one - noted here only because they were
+  caught via RegisterNumber-adjacent test data; see that entry above for
+  the actual fixes (`STANDARD_MANDANT_COLUMNS`, `_MANDANT_COLUMN_TO_ATTR`).
+  Verified with 18 unit tests (every classification branch - JUNK/
+  CANONICAL/STANDARD/LLM - the digit-preservation guard, both standard-
+  ization branches) and a live e2e run against real Postgres/Clerk with a
+  dataset covering all four classes plus an empty value: a prefix-format
+  case, an already-canonical case, a legacy-HRN case genuinely sent to and
+  correctly rewritten by Claude Haiku ("HRN 227565 B" -> "HRB 227565",
+  confirming the documented department-suffix rule end-to-end, not just in
+  the prompt), and two distinct junk cases (placeholder text, dummy digit
+  repetition) that correctly produced no proposal and were left untouched
+  on Mandant after an "accept all HIGH" - confirmed by querying Postgres
+  directly.
+
 ## Phase 3 — Productionization
 
 Azure deployment (Container Apps, Azure DB for PostgreSQL, Azure Cache for

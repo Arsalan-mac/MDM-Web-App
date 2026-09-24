@@ -801,3 +801,55 @@ export async function downloadSapTemplateWorkbook(token: string, projectId: stri
   }
   return response.blob();
 }
+
+export type RegisterCleansingSummary = {
+  filled: number;
+  junk: number;
+  canonical: number;
+  std: number;
+  llm_candidates: number;
+  llm_done: number;
+};
+
+export type RegisterCleansingProposal = {
+  id: string;
+  IDParty: string;
+  CompanyName: string | null;
+  CountryCode: string | null;
+  RegisterCity: string;
+  RegisterNumber_Alt: string;
+  RegisterNumber_Neu: string;
+  Stufe: "STANDARD" | "LLM";
+  Confidence: "HIGH" | "MEDIUM" | "LOW";
+  Begruendung: string;
+};
+
+export function runRegisterCleansing(
+  token: string,
+  projectId: string,
+  useLlm: boolean = true,
+  llmLimit: number = 0,
+): Promise<RegisterCleansingSummary> {
+  return apiFetch<RegisterCleansingSummary>(`/projects/${projectId}/register-cleansing/run`, token, {
+    method: "POST",
+    body: JSON.stringify({ use_llm: useLlm, llm_limit: llmLimit }),
+  });
+}
+
+export function listRegisterCleansingProposals(
+  token: string,
+  projectId: string,
+): Promise<RegisterCleansingProposal[]> {
+  return apiFetch<RegisterCleansingProposal[]>(`/projects/${projectId}/register-cleansing`, token);
+}
+
+export function acceptRegisterCleansing(
+  token: string,
+  projectId: string,
+  confidences: string[],
+): Promise<{ updated: number }> {
+  return apiFetch(`/projects/${projectId}/register-cleansing/accept`, token, {
+    method: "POST",
+    body: JSON.stringify({ confidences }),
+  });
+}
