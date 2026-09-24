@@ -48,7 +48,7 @@ async def upload_mandanten(
     df = harmonize_dataframe(df)
 
     try:
-        summary = await initial_load_mandanten(db, df, file.filename)
+        summary = await initial_load_mandanten(db, project_id, df, file.filename)
     except ValueError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
 

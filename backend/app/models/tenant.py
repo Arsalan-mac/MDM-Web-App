@@ -89,15 +89,28 @@ class Mandant(TenantBase):
 
     __tablename__ = "mandanten"
 
+    # Composite PK: a tenant can run several migration Projects (unlike the
+    # original app, which only ever had one workspace/DB per client), and
+    # each has its own Mandanten universe - IDParty alone is only unique
+    # within one project's source system, not across all of a tenant's
+    # projects.
+    project_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("projects.id"), primary_key=True)
     IDParty: Mapped[str] = mapped_column(String(64), primary_key=True)
     CompanyName: Mapped[str | None] = mapped_column(Text)
     CountryCode: Mapped[str | None] = mapped_column(String(10))
     Address: Mapped[str | None] = mapped_column(Text)
     City: Mapped[str | None] = mapped_column(Text)
     ZipCode: Mapped[str | None] = mapped_column(String(20))
+    DistrictCode: Mapped[str | None] = mapped_column(String(32))
     VATNumber: Mapped[str | None] = mapped_column(String(64))
     IsOrganisation: Mapped[str | None] = mapped_column(String(8))
     IsIndividual: Mapped[str | None] = mapped_column(String(8))
+    IsInactive: Mapped[str | None] = mapped_column(String(8))
+    # Owner of a record (creator) vs. the person responsible for resolving its
+    # data-quality issues (Kummerer) - both needed once Address Cleansing's
+    # Nacharbeit step surfaces who should act on a finding.
+    UserCode_Added: Mapped[str | None] = mapped_column(String(64))
+    UserCode_Kummerer: Mapped[str | None] = mapped_column(String(64))
     FiscalCode: Mapped[str | None] = mapped_column(String(64))
     Email: Mapped[str | None] = mapped_column(String(320))
     WebSite: Mapped[str | None] = mapped_column(String(320))
@@ -112,3 +125,45 @@ class Mandant(TenantBase):
     Load_Date: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     Source_FILE: Mapped[str | None] = mapped_column(String(255))
     Change_Reason: Mapped[str] = mapped_column(String(255), default="")
+
+
+class JunkAddress(TenantBase):
+    """Findings from the Address Cleansing stage's Adress-Analyse check
+    ('JUNK_ADDRESS' in the original app) - one row per flagged Mandant per
+    field. Currently populated only by the Address field check
+    (app/cleansing/address_checks.py); PLZ/City findings are added once the
+    Referenzdaten stage (PLZ_RULES, GeoNames) is ported - see docs/ROADMAP.md.
+
+    A snapshot of the Mandant's own data is stored alongside the finding (as
+    in the original) so the findings list and Nacharbeit review don't need a
+    join back to `mandanten` - and so a finding still shows accurate context
+    even if the record changes before it's reviewed.
+    """
+
+    __tablename__ = "junk_address"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    project_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("projects.id"), index=True)
+    IDParty: Mapped[str] = mapped_column(String(64), index=True)
+
+    UserCode_Added: Mapped[str | None] = mapped_column(String(64))
+    UserCode_Kummerer: Mapped[str | None] = mapped_column(String(64))
+    CompanyName: Mapped[str | None] = mapped_column(Text)
+    IsOrganisation: Mapped[str | None] = mapped_column(String(8))
+    IsIndividual: Mapped[str | None] = mapped_column(String(8))
+    IsInactive: Mapped[str | None] = mapped_column(String(8))
+    Address: Mapped[str | None] = mapped_column(Text)
+    City: Mapped[str | None] = mapped_column(Text)
+    ZipCode: Mapped[str | None] = mapped_column(String(20))
+    CountryCode: Mapped[str | None] = mapped_column(String(10))
+    Reason: Mapped[str] = mapped_column(Text, default="")
+
+    # The proposed fix: set Mandant.<Feld> from Alt to Neu.
+    Feld: Mapped[str] = mapped_column(String(32))
+    Alt: Mapped[str | None] = mapped_column(Text)
+    Neu: Mapped[str | None] = mapped_column(Text)
+    Kategorie: Mapped[str] = mapped_column(String(64))
+    Aktion: Mapped[str] = mapped_column(String(16))  # ERSETZEN | LEEREN | MANUELL
+    Confidence: Mapped[str] = mapped_column(String(16), default="")  # hoch | mittel | niedrig | ""
+
+    Load_Date: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

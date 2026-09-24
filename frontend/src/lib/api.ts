@@ -86,3 +86,53 @@ export function uploadMandanten(token: string, projectId: string, file: File): P
   formData.append("file", file);
   return apiUpload<LoadSummary>(`/projects/${projectId}/load-data/mandanten/upload`, token, formData);
 }
+
+export type AnalysisSummary = {
+  rows_checked: number;
+  findings: number;
+  by_category: Record<string, number>;
+  by_confidence: Record<string, number>;
+};
+
+export type JunkAddressFinding = {
+  id: string;
+  IDParty: string;
+  UserCode_Kummerer: string | null;
+  CompanyName: string | null;
+  Address: string | null;
+  City: string | null;
+  ZipCode: string | null;
+  CountryCode: string | null;
+  Reason: string;
+  Feld: string;
+  Alt: string | null;
+  Neu: string | null;
+  Kategorie: string;
+  Aktion: "ERSETZEN" | "LEEREN" | "MANUELL";
+  Confidence: "hoch" | "mittel" | "niedrig" | "";
+};
+
+export function runAddressAnalysis(token: string, projectId: string): Promise<AnalysisSummary> {
+  return apiFetch<AnalysisSummary>(`/projects/${projectId}/address-cleansing/analyze`, token, {
+    method: "POST",
+  });
+}
+
+export function listAddressJunk(token: string, projectId: string): Promise<JunkAddressFinding[]> {
+  return apiFetch<JunkAddressFinding[]>(`/projects/${projectId}/address-cleansing/junk`, token);
+}
+
+export async function acceptAddressFinding(token: string, projectId: string, findingId: string): Promise<void> {
+  const response = await fetch(
+    `${API_URL}/projects/${projectId}/address-cleansing/junk/${findingId}/accept`,
+    {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+      cache: "no-store",
+    },
+  );
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`Accept failed: ${response.status} ${body}`);
+  }
+}

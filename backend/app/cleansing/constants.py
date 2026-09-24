@@ -25,7 +25,8 @@ MANDANT_INTEGER_COLS = [
 # in Mandant.extra instead.
 STANDARD_MANDANT_COLUMNS = [
     "IDParty", "CompanyName", "CountryCode", "Address", "City", "ZipCode",
-    "VATNumber", "IsOrganisation", "IsIndividual", "FiscalCode", "Email",
+    "DistrictCode", "VATNumber", "IsOrganisation", "IsIndividual", "IsInactive",
+    "UserCode_Added", "UserCode_Kummerer", "FiscalCode", "Email",
     "WebSite", "PhoneNumber", "FaxNumber", "DateFounded", "LiquidationDate",
     "RegisterCourtDate",
 ]

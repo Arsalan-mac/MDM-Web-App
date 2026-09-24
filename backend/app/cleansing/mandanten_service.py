@@ -1,5 +1,7 @@
 """Persistence for the Load Data stage's Mandanten (client master data) upload."""
 
+import uuid
+
 import pandas as pd
 from sqlalchemy import delete, insert
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -8,8 +10,8 @@ from app.cleansing.constants import MANDANT_PRIMARY_KEY, STANDARD_MANDANT_COLUMN
 from app.models.tenant import Mandant
 
 
-def _row_to_record(row: dict, extra_cols: list[str], file_name: str) -> dict:
-    record: dict = {}
+def _row_to_record(row: dict, extra_cols: list[str], project_id: uuid.UUID, file_name: str) -> dict:
+    record: dict = {"project_id": project_id}
     for col in STANDARD_MANDANT_COLUMNS:
         val = row.get(col)
         record[col] = None if pd.isna(val) else val
@@ -19,9 +21,12 @@ def _row_to_record(row: dict, extra_cols: list[str], file_name: str) -> dict:
     return record
 
 
-async def initial_load_mandanten(db: AsyncSession, df: pd.DataFrame, file_name: str) -> dict:
-    """Full replace of the mandanten table - "Initial Load ersetzt die Tabelle
-    vollständig", matching the original app's df.to_sql(if_exists="replace").
+async def initial_load_mandanten(db: AsyncSession, project_id: uuid.UUID, df: pd.DataFrame, file_name: str) -> dict:
+    """Full replace of this project's rows in `mandanten` - "Initial Load
+    ersetzt die Tabelle vollständig", matching the original app's
+    df.to_sql(if_exists="replace") (scoped to one project's rows here, since
+    - unlike the original's single workspace per client - a tenant can have
+    several projects sharing one `mandanten` table).
 
     Delta upload (upsert against an existing table, with Change_Reason
     tracking per data_upload_module.run_delta_upsert) is not yet ported -
@@ -40,9 +45,9 @@ async def initial_load_mandanten(db: AsyncSession, df: pd.DataFrame, file_name: 
         raise ValueError(f"No rows with a valid '{MANDANT_PRIMARY_KEY}' found in the uploaded file.")
 
     extra_cols = [c for c in df.columns if c not in STANDARD_MANDANT_COLUMNS]
-    records = [_row_to_record(row, extra_cols, file_name) for row in df.to_dict(orient="records")]
+    records = [_row_to_record(row, extra_cols, project_id, file_name) for row in df.to_dict(orient="records")]
 
-    await db.execute(delete(Mandant))
+    await db.execute(delete(Mandant).where(Mandant.project_id == project_id))
     await db.execute(insert(Mandant.__table__), records)
     await db.commit()
 

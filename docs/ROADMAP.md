@@ -13,15 +13,31 @@ Claude-powered "talk to your data" agent.
 - 1b. Multi-tenancy core: `Tenant` model (mapped to a Clerk Organization),
   schema-per-tenant provisioning, `Project`/`Stage` model encoding the fixed
   pipeline and its locking rules.
-- 1c. First pipeline slice ported end-to-end: **Load Data** (done - Mandanten
-  Initial Load: parse/standardize/clean, full-replace into the tenant's
-  `mandanten` table, marks the stage done) → **Address Cleansing** (next up:
-  reference data, Adress-Analyse, Nacharbeit, Zerlegung, `JUNK_ADDRESS`,
-  DB-split/"infiziert" quarantine) as API + background jobs + frontend
-  screens. Delta Upload and the other reference tables the original app
-  loads (Auftraege, Rollen, Klammertabelle, Verbundene_Parteien, Branchen,
-  Mandant_Gegner, Lieferanten, UserCode) are deferred to Phase 2, ported
-  alongside the stages that actually consume them.
+- 1c. First pipeline slice ported end-to-end:
+  - **Load Data** (done) - Mandanten Initial Load: parse/standardize/clean,
+    full-replace into the tenant's `mandanten` table, marks the stage done.
+    Delta Upload and the other reference tables the original app loads
+    (Auftraege, Rollen, Klammertabelle, Verbundene_Parteien, Branchen,
+    Mandant_Gegner, Lieferanten, UserCode) are deferred to Phase 2, ported
+    alongside the stages that actually consume them.
+  - **Address Cleansing - Adress-Analyse (Address field check) + Nacharbeit**
+    (done) - `check_addresses` ported in full (placeholder text, legal-form/
+    contact-info-in-address, too-long/short, missing house number, city/PLZ
+    text embedded in the address), writing to a `junk_address` table;
+    Nacharbeit accepts Hoch/Mittel-confidence proposals into `mandanten`.
+    **Deferred, each its own follow-up**: the **Referenzdaten** stage
+    (curated PLZ_RULES + optional GeoNames import) and the PLZ/City checks
+    that depend on it (`check_zipcodes`, `check_city_region`); the
+    Claude-based correction step for KONTAKTINFO/RECHTSFORM/ADRESSE_ZU_LANG
+    findings (pairs with 1d below); **Zerlegung** (splitting a corrected
+    address into SAP fields STREET/HOUSE_NUM1/STR_SUPPL1-3/BUILDING); and
+    **Datenbank-Split** (quarantining "infected" records linked to bad
+    addresses).
+  - Also fixed along the way: `Mandant`/`JunkAddress` now carry a
+    `project_id` (a tenant can run several migration projects, unlike the
+    original app's one-workspace-per-client model - initially missed when
+    Load Data was built, caught and fixed before Address Cleansing could
+    inherit the same gap).
 - 1d. Chat-with-data agent v1: Claude API tool use, a handful of curated
   read-only tools scoped to one tenant+project, chat panel in the UI.
 
