@@ -309,6 +309,65 @@ Template Migration, RegisterNumber Cleansing, Delete Records.
   resetting reverted to the code defaults and restored the original junk
   finding exactly.
 
+- **Tax Cleansing - Migration Preparation phase** (done) - ported from
+  tax_cleansing_module.py's third and final tab: `_run_vat_migration_if_
+  requested` and `_run_steuer_migration_if_requested` (build `TAX_MIGRATION_
+  RESULT` rows from whichever track's clean population - CH/NO/RU pre-
+  cleaning, EU/Non-EU region-based `VAT_MAPPING` lookup, Canada's pattern-
+  based special case, FISCAL_RULES sap_code lookup for Steuernummer),
+  `validate_taxtypes_against_categories` (UNKNOWN/OBSOLETE/COUNTRY_MISMATCH/
+  VAT_CATEGORY_HINT/KEY_COLLISION checks against the official SAP Tax Number
+  Categories list), `_suggest_collision_code`, and the TAXTYPE_REMAP/
+  TAXTYPE_ROW_FIX correction tables. The 377-entry SAP category list
+  (`_SAP_TAX_CATEGORIES_SEED`) and the 58-entry `_VAT_MAPPING_SEED` were
+  both extracted programmatically (`ast.literal_eval`, verified byte-for-
+  byte) into `app/cleansing/sap_tax_categories.py` and `vat_mapping_seed.py`
+  - same reasoning as the fiscal-rules seed: this is reference tax data,
+  not something to retype by hand.
+  **Scope decisions**: Canada's special-case TAXTYPE assignment
+  (`_assign_ca_code` - RT-suffixed accounts keep the full value under CA1;
+  other R[A-Z] accounts and bare 9-digit Business Numbers reduce to their
+  9-digit BN under CA2) is ported faithfully even though CA2 isn't itself in
+  the official SAP category list - the validation step correctly flags that
+  as UNKNOWN, which is the original algorithm's real (if debatable) behavior,
+  not a porting bug; see the live-test note below. `SAP-Abgleich` (`run_sap_
+  taxtype_sync`, direct sync against a connected SAP system) is dropped
+  entirely rather than deferred - reading the original's own current tab-
+  rendering code confirms this feature is already hidden/disabled in the
+  upstream app itself, so there is no live behavior to port. As with every
+  other stage, the original's extensive per-region/per-country/per-entity
+  Excel exports are deferred, consistent with the established Excel-export
+  deferral pattern; migration logic and TAXTYPE assignment are ported in
+  full, only file-delivery mechanics are dropped. VAT_MAPPING is a project-
+  scoped, user-editable table (list/save/reset), matching FISCAL_RULES'
+  precedent. Both migration tracks recompute their junk population fresh via
+  the existing stateless VAT/FiscalCode analysis functions rather than
+  depending on a separately persisted junk table, avoiding a staleness bug
+  class that isn't present in this codebase to begin with.
+  Verified end-to-end against real Postgres/Clerk with a 9-Mandant dataset
+  covering DE/FR/IT/ES/NL VAT, a splittable and an unsplittable Russian VAT,
+  and both Canadian patterns (RT and bare/RC BN): VAT migration produced the
+  expected 10 result rows (9 Mandanten, RU's INN/KPP split into 2); a DE
+  FiscalCode migrated to the correct Steuernummer SAP code while the other 8
+  empty FiscalCodes were correctly excluded; the baseline validation run was
+  clean except for the expected CA2-not-in-category-list UNKNOWN finding
+  (see scope note above); four TAXTYPE_REMAP entries were added and, on
+  re-migration, correctly produced one UNKNOWN, one OBSOLETE, one COUNTRY_
+  MISMATCH, and three VAT_CATEGORY_HINT findings (matching the validation
+  mask's exact logic, including that an obsolete code still independently
+  triggers a VAT-category hint); the collision-suggestion endpoint correctly
+  proposed a country's official VAT code for a mismatched VAT row; a
+  TAXTYPE_ROW_FIX entry was used to deliberately force two TAX_MIGRATION_
+  RESULT rows for the same IDParty to the same TAXTYPE, which the validator
+  correctly flagged as a KEY_COLLISION naming both rows, and the collision-
+  suggestion endpoint correctly proposed reverting to the Steuernummer
+  category; deleting the row-fix and remaps and re-running both migrations
+  confirmed every finding count returned to its clean baseline; and the VAT
+  Mapping editor's edit/save/reload/reset round-trip persisted and reverted
+  a region change exactly as expected.
+  This completes Tax Cleansing (all three tabs: VAT-Cleansing,
+  Steuernummer-Cleansing, Migration Preparation).
+
 ## Phase 3 — Productionization
 
 Azure deployment (Container Apps, Azure DB for PostgreSQL, Azure Cache for

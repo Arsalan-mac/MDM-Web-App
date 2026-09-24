@@ -532,6 +532,161 @@ export function runFiscalCodeAnalysis(token: string, projectId: string): Promise
   });
 }
 
+export type VatMappingEntry = { code: string; region: string };
+
+export function getVatMapping(token: string, projectId: string): Promise<VatMappingEntry[]> {
+  return apiFetch<VatMappingEntry[]>(`/projects/${projectId}/tax-cleansing/vat-mapping`, token);
+}
+
+export function saveVatMapping(
+  token: string,
+  projectId: string,
+  entries: VatMappingEntry[],
+): Promise<{ saved: number }> {
+  return apiFetch(`/projects/${projectId}/tax-cleansing/vat-mapping`, token, {
+    method: "POST",
+    body: JSON.stringify({ entries }),
+  });
+}
+
+export function resetVatMapping(token: string, projectId: string): Promise<{ row_count: number }> {
+  return apiFetch(`/projects/${projectId}/tax-cleansing/vat-mapping/reset`, token, { method: "POST" });
+}
+
+export type TaxtypeValidationFinding = {
+  migration: string;
+  id_party: string;
+  source_value: string;
+  taxtype: string;
+  country_code: string | null;
+  finding: string;
+  sap_description: string;
+};
+
+export type TaxtypeValidation = {
+  error?: string;
+  total?: number;
+  unknown?: number;
+  obsolete?: number;
+  mismatch?: number;
+  vat_hint?: number;
+  collision?: number;
+  findings?: TaxtypeValidationFinding[];
+};
+
+export type MigrationRunResult = {
+  total_raw: number;
+  total_junk_removed: number;
+  total_empty_removed: number;
+  migrated: number;
+  validation: TaxtypeValidation;
+};
+
+export function runVatMigration(token: string, projectId: string): Promise<MigrationRunResult> {
+  return apiFetch<MigrationRunResult>(`/projects/${projectId}/tax-cleansing/migration/vat`, token, {
+    method: "POST",
+  });
+}
+
+export function runSteuerMigration(token: string, projectId: string): Promise<MigrationRunResult> {
+  return apiFetch<MigrationRunResult>(`/projects/${projectId}/tax-cleansing/migration/steuernummer`, token, {
+    method: "POST",
+  });
+}
+
+export function getTaxtypeValidation(token: string, projectId: string): Promise<TaxtypeValidation> {
+  return apiFetch<TaxtypeValidation>(`/projects/${projectId}/tax-cleansing/migration/validation`, token);
+}
+
+export async function getCollisionSuggestion(
+  token: string,
+  projectId: string,
+  countryCode: string,
+  currentCode: string,
+  migration: string,
+): Promise<string | null> {
+  const params = new URLSearchParams({ country_code: countryCode, current_code: currentCode, migration });
+  const { suggested_code } = await apiFetch<{ suggested_code: string | null }>(
+    `/projects/${projectId}/tax-cleansing/migration/collision-suggestion?${params.toString()}`,
+    token,
+  );
+  return suggested_code;
+}
+
+export type TaxtypeRemapEntry = { source_code: string; target_code: string };
+
+export function getTaxtypeRemaps(token: string, projectId: string): Promise<TaxtypeRemapEntry[]> {
+  return apiFetch<TaxtypeRemapEntry[]>(`/projects/${projectId}/tax-cleansing/taxtype-remap`, token);
+}
+
+export async function saveTaxtypeRemap(
+  token: string,
+  projectId: string,
+  sourceCode: string,
+  targetCode: string,
+): Promise<void> {
+  const response = await fetch(`${API_URL}/projects/${projectId}/tax-cleansing/taxtype-remap`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ source_code: sourceCode, target_code: targetCode }),
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    const body = await response.text();
+    throw new ApiError(response.status, `Save remap failed: ${response.status} ${body}`);
+  }
+}
+
+export function deleteTaxtypeRemaps(
+  token: string,
+  projectId: string,
+  sourceCodes: string[],
+): Promise<{ deleted: number }> {
+  return apiFetch(`/projects/${projectId}/tax-cleansing/taxtype-remap/delete`, token, {
+    method: "POST",
+    body: JSON.stringify({ source_codes: sourceCodes }),
+  });
+}
+
+export type TaxtypeRowFixEntry = {
+  id_party: string;
+  migration: string;
+  source_code: string;
+  target_code: string;
+};
+
+export function getTaxtypeRowFixes(token: string, projectId: string): Promise<TaxtypeRowFixEntry[]> {
+  return apiFetch<TaxtypeRowFixEntry[]>(`/projects/${projectId}/tax-cleansing/taxtype-row-fix`, token);
+}
+
+export async function saveTaxtypeRowFix(
+  token: string,
+  projectId: string,
+  entry: TaxtypeRowFixEntry,
+): Promise<void> {
+  const response = await fetch(`${API_URL}/projects/${projectId}/tax-cleansing/taxtype-row-fix`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify(entry),
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    const body = await response.text();
+    throw new ApiError(response.status, `Save row fix failed: ${response.status} ${body}`);
+  }
+}
+
+export function deleteTaxtypeRowFixes(
+  token: string,
+  projectId: string,
+  keys: [string, string, string][],
+): Promise<{ deleted: number }> {
+  return apiFetch(`/projects/${projectId}/tax-cleansing/taxtype-row-fix/delete`, token, {
+    method: "POST",
+    body: JSON.stringify({ keys }),
+  });
+}
+
 export function setStageStatus(
   token: string,
   projectId: string,

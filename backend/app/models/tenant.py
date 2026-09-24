@@ -357,3 +357,82 @@ class FiscalRule(TenantBase):
     SourceUrl: Mapped[str | None] = mapped_column(String(512))
     Confidence: Mapped[str] = mapped_column(String(8), default="HIGH")  # HIGH | MEDIUM | LOW
     Load_Date: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class VatMapping(TenantBase):
+    """Editable country -> SAP TAXTYPE code table for the VAT migration track
+    ('VAT_MAPPING' in the original app). Scoped per-project like FiscalRule;
+    lazily seeded from VAT_MAPPING_SEED (app/cleansing/vat_mapping_seed.py).
+    """
+
+    __tablename__ = "vat_mapping"
+    __table_args__ = (UniqueConstraint("project_id", "SapCode", name="uq_vat_mapping_project_code"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    project_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("projects.id"), index=True)
+    SapCode: Mapped[str] = mapped_column(String(8))
+    Region: Mapped[str] = mapped_column(String(16))  # "EU / Europe" | "Non-EU"
+    Load_Date: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class TaxMigrationResult(TenantBase):
+    """One row per Mandant per migration track ('TAX_MIGRATION_RESULT' in the
+    original app) - the SAP-import-ready TAXTYPE/TAXNUML/TAXNUMXL assignment
+    produced by Tax Cleansing's Migration Preparation. A full replace of one
+    Migration value's rows per run; the other track's rows are untouched.
+
+    No unique constraint: a split Russian VAT value produces two rows (INN
+    and KPP) sharing the same IDParty, exactly like the original.
+    """
+
+    __tablename__ = "tax_migration_result"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    project_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("projects.id"), index=True)
+    Migration: Mapped[str] = mapped_column(String(16))  # VAT | STEUERNUMMER
+    IDParty: Mapped[str] = mapped_column(String(64), index=True)
+    SourceValue: Mapped[str] = mapped_column(String(64))
+    TAXTYPE: Mapped[str] = mapped_column(String(8))
+    TAXNUML: Mapped[str | None] = mapped_column(String(20))
+    TAXNUMXL: Mapped[str | None] = mapped_column(String(64))
+    CountryCode: Mapped[str | None] = mapped_column(String(4))
+    Load_Date: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class TaxtypeRemap(TenantBase):
+    """Persistent source->target TAXTYPE code correction ('TAXTYPE_REMAP' in
+    the original app), re-applied to TaxMigrationResult on every migration
+    run - typically used to resolve an UNKNOWN/OBSOLETE finding globally.
+    """
+
+    __tablename__ = "taxtype_remap"
+    __table_args__ = (UniqueConstraint("project_id", "SourceCode", name="uq_taxtype_remap_project_source"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    project_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("projects.id"), index=True)
+    SourceCode: Mapped[str] = mapped_column(String(8))
+    TargetCode: Mapped[str] = mapped_column(String(8))
+    Load_Date: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class TaxtypeRowFix(TenantBase):
+    """Row-level TAXTYPE correction ('TAXTYPE_ROW_FIX' in the original app)
+    keyed by (IDParty, Migration, SourceCode) - resolves a KEY_COLLISION
+    finding for one specific row rather than every row with that source
+    code, re-applied to TaxMigrationResult on every migration run.
+    """
+
+    __tablename__ = "taxtype_row_fix"
+    __table_args__ = (
+        UniqueConstraint(
+            "project_id", "IDParty", "Migration", "SourceCode", name="uq_taxtype_row_fix_project_key"
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    project_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("projects.id"), index=True)
+    IDParty: Mapped[str] = mapped_column(String(64))
+    Migration: Mapped[str] = mapped_column(String(16))
+    SourceCode: Mapped[str] = mapped_column(String(8))
+    TargetCode: Mapped[str] = mapped_column(String(8))
+    Load_Date: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

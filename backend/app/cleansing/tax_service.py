@@ -1,11 +1,26 @@
-"""Tax Cleansing: VAT-Cleansing and Steuernummer-Cleansing (Fiscal Code)
-tabs. Ported from tax_cleansing_module.py's run_unified_vat_analysis /
-run_vat_duplicate_analysis / run_fiscal_code_analysis and the FISCAL_RULES
-DB layer (ensure_fiscal_rules_table, load_fiscal_rules_from_db, the
-Regelwerk editor's save/reset actions).
+"""Tax Cleansing: VAT-Cleansing, Steuernummer-Cleansing (Fiscal Code) and
+Migration Preparation tabs. Ported from tax_cleansing_module.py's
+run_unified_vat_analysis / run_vat_duplicate_analysis /
+run_fiscal_code_analysis, the FISCAL_RULES DB layer, and the Migration
+Preparation workflow (_run_vat_migration_if_requested,
+_run_steuer_migration_if_requested, validate_taxtypes_against_categories,
+the TAXTYPE_REMAP/TAXTYPE_ROW_FIX apply/CRUD layer, VAT_MAPPING).
 
-Migration Preparation (TAXTYPE validation/remap/collision-fix, SAP sync)
-is a separate, larger follow-up phase - see docs/ROADMAP.md.
+Migration Preparation here deliberately drops two things from the
+original:
+- Every per-region/per-country Excel export (EU master file, one file per
+  Non-EU country+code, separate RU1/RU3 files, Organizations/Individuals
+  subfolders for Steuernummer). That's file-delivery mechanics, not
+  migration logic - the underlying TaxMigrationResult table is this app's
+  equivalent deliverable, retrievable over the API - consistent with
+  every other stage's Excel-export deferral so far. The TAXTYPE
+  assignment logic itself (including Canada's RT/BN pattern-based
+  special-casing) is ported faithfully since that's real business logic,
+  not export mechanics.
+- SAP-Abgleich (run_sap_taxtype_sync): the original's own current version
+  already hides this tab ("der SAP-Bestand wird nicht mehr als Referenz
+  verwendet") and it depends on the SAP-Steuernummern upload this backend
+  hasn't ported either, so there's nothing to wire it to.
 """
 
 import re
@@ -17,8 +32,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.cleansing.constants import MANDANT_VAT_COL
 from app.cleansing.fiscal_rules_seed import FISCAL_RULES_SEED
 from app.cleansing.quality_report import compute_quality_report
+from app.cleansing.sap_tax_categories import OBSOLETE_CATEGORIES, SAP_TAX_CATEGORIES
+from app.cleansing.vat_mapping_seed import VAT_MAPPING_SEED
 from app.cleansing.vat_rules import VAT_RULES, clean_norwegian_vat, clean_swiss_vat, clean_tax_number, split_russian_tax_number
-from app.models.tenant import FiscalRule, Mandant
+from app.models.tenant import FiscalRule, Mandant, TaxMigrationResult, TaxtypeRemap, TaxtypeRowFix, VatMapping
 
 _PLACEHOLDER_TOKENS = ("?", "*", "!", "TBA", "PENDING", "UNKNOWN")
 _STRIP_NON_ALNUM_RE = re.compile(r"[^A-Z0-9Ñ&]")
@@ -355,3 +372,424 @@ async def run_fiscal_code_analysis(db: AsyncSession, project_id: uuid.UUID) -> d
     quality_report = compute_quality_report(rows, junk_ids, empty_ids, optional_field=True)
 
     return {"junk": junk, "quality_report": quality_report}
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# VAT_MAPPING: editable country -> TAXTYPE table for the VAT migration track
+# ─────────────────────────────────────────────────────────────────────────
+
+
+async def ensure_vat_mapping(db: AsyncSession, project_id: uuid.UUID) -> None:
+    count = (
+        await db.execute(select(func.count()).select_from(VatMapping).where(VatMapping.project_id == project_id))
+    ).scalar_one()
+    if count == 0:
+        for entry in VAT_MAPPING_SEED:
+            db.add(VatMapping(project_id=project_id, SapCode=entry["Code"], Region=entry["Region"]))
+        await db.commit()
+
+
+async def list_vat_mapping(db: AsyncSession, project_id: uuid.UUID) -> list[VatMapping]:
+    await ensure_vat_mapping(db, project_id)
+    result = await db.execute(select(VatMapping).where(VatMapping.project_id == project_id).order_by(VatMapping.SapCode))
+    return list(result.scalars().all())
+
+
+async def save_vat_mapping(db: AsyncSession, project_id: uuid.UUID, entries: list[dict]) -> int:
+    await db.execute(delete(VatMapping).where(VatMapping.project_id == project_id))
+    saved = 0
+    for e in entries:
+        code = (e.get("code") or "").strip().upper()
+        if not code:
+            continue
+        region = e.get("region") or "Non-EU"
+        if region not in ("EU / Europe", "Non-EU"):
+            region = "Non-EU"
+        db.add(VatMapping(project_id=project_id, SapCode=code, Region=region))
+        saved += 1
+    await db.commit()
+    return saved
+
+
+async def reset_vat_mapping(db: AsyncSession, project_id: uuid.UUID) -> int:
+    await db.execute(delete(VatMapping).where(VatMapping.project_id == project_id))
+    await db.commit()
+    await ensure_vat_mapping(db, project_id)
+    result = await db.execute(select(func.count()).select_from(VatMapping).where(VatMapping.project_id == project_id))
+    return result.scalar_one()
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# Migration result persistence + the two migration tracks (VAT, Steuernummer)
+# ─────────────────────────────────────────────────────────────────────────
+
+
+def _migration_row(id_party: str, value: str, taxtype: str, country_code: str | None) -> dict:
+    value = value or ""
+    return {
+        "IDParty": id_party,
+        "SourceValue": value,
+        "TAXTYPE": taxtype,
+        "TAXNUML": value if len(value) <= 20 else None,
+        "TAXNUMXL": value if len(value) > 20 else None,
+        "CountryCode": country_code,
+    }
+
+
+async def _save_tax_migration_result(
+    db: AsyncSession, project_id: uuid.UUID, migration_type: str, rows: list[dict]
+) -> None:
+    """Full replace of this migration type's rows - the other track's rows
+    (VAT vs STEUERNUMMER) are untouched, matching save_tax_migration_result."""
+    await db.execute(
+        delete(TaxMigrationResult).where(
+            TaxMigrationResult.project_id == project_id, TaxMigrationResult.Migration == migration_type
+        )
+    )
+    for r in rows:
+        db.add(TaxMigrationResult(project_id=project_id, Migration=migration_type, **r))
+    await db.commit()
+
+
+def _assign_ca_code(vat_value: str) -> tuple[str | None, str]:
+    """Canada: RT-suffixed accounts (GST/HST) keep the full number under
+    CA1; RC/RP/other R[A-Z] accounts and bare 9-digit Business Numbers
+    reduce to their 9-digit BN under CA2."""
+    v = re.sub(r"[^A-Z0-9]", "", clean_tax_number(vat_value, country="CA"))
+    digits = re.sub(r"\D", "", v)
+    if re.search(r"RT\d{4}", v) and len(digits) >= 9:
+        return ("CA1", v)
+    if re.search(r"R[A-Z]\d{4}", v) and len(digits) >= 9:
+        return ("CA2", digits[:9])
+    if len(digits) == 9:
+        return ("CA2", digits)
+    return (None, v)
+
+
+async def run_vat_migration(db: AsyncSession, project_id: uuid.UUID) -> dict:
+    """Builds the VAT-track rows of TaxMigrationResult: excludes the VAT
+    junk population (recomputed fresh via run_vat_analysis, rather than
+    depending on a persisted junk table from a possibly-stale prior run -
+    see module docstring's stateless-checks note), applies CH/NO/RU
+    pre-cleaning, resolves a TAXTYPE from VatMapping (RU always splits
+    into RU1/RU3 regardless of the mapping table; CA is pattern-assigned
+    via _assign_ca_code), and computes TAXNUML/TAXNUMXL by length."""
+    analysis = await run_vat_analysis(db, project_id)
+    junk_ids = {j["id_party"] for j in analysis["junk"]}
+
+    mapping_rows = await list_vat_mapping(db, project_id)
+    country_to_code = {m.SapCode[:2]: m.SapCode for m in mapping_rows if m.SapCode[:2] not in ("CA", "RU")}
+
+    result = await db.execute(select(Mandant).where(Mandant.project_id == project_id))
+    mandanten = list(result.scalars().all())
+
+    rows: list[dict] = []
+    empty_removed = 0
+    for m in mandanten:
+        if m.IDParty in junk_ids:
+            continue
+        if _is_clean(m.VATNumber):
+            empty_removed += 1
+            continue
+        cc = (m.CountryCode or "").strip().upper()
+        vat = m.VATNumber.strip().upper()
+
+        if cc == "CH":
+            vat = clean_swiss_vat(vat)
+        elif cc == "NO":
+            vat = clean_norwegian_vat(vat)
+
+        if cc == "RU":
+            inn, kpp, slash_count = split_russian_tax_number(vat)
+            rows.append(_migration_row(m.IDParty, inn, "RU1", cc))
+            if slash_count == 1:
+                rows.append(_migration_row(m.IDParty, kpp, "RU3", cc))
+            continue
+
+        if cc == "CA":
+            code, value = _assign_ca_code(vat)
+            if code:
+                rows.append(_migration_row(m.IDParty, value, code, cc))
+            continue
+
+        code = country_to_code.get(cc)
+        if not code:
+            continue
+        rows.append(_migration_row(m.IDParty, vat, code, cc))
+
+    await _save_tax_migration_result(db, project_id, "VAT", rows)
+    await apply_taxtype_remap(db, project_id)
+    await apply_taxtype_row_fixes(db, project_id)
+    validation = await run_taxtype_validation(db, project_id)
+
+    return {
+        "total_raw": len(mandanten),
+        "total_junk_removed": len(junk_ids),
+        "total_empty_removed": empty_removed,
+        "migrated": len(rows),
+        "validation": validation,
+    }
+
+
+async def run_steuer_migration(db: AsyncSession, project_id: uuid.UUID) -> dict:
+    """Builds the STEUERNUMMER-track rows of TaxMigrationResult: excludes
+    the FiscalCode junk population (recomputed fresh, same reasoning as
+    run_vat_migration), resolves a TAXTYPE from this project's FiscalRule
+    table by (country, entity_type).sap_code, and computes TAXNUML/TAXNUMXL."""
+    fiscal_analysis = await run_fiscal_code_analysis(db, project_id)
+    junk_ids = {j["id_party"] for j in fiscal_analysis["junk"]}
+
+    await ensure_fiscal_rules(db, project_id)
+    rules_result = await db.execute(select(FiscalRule).where(FiscalRule.project_id == project_id))
+    sap_code_by_key = {(r.CountryCode, r.EntityType): r.SapCode for r in rules_result.scalars().all()}
+
+    result = await db.execute(select(Mandant).where(Mandant.project_id == project_id))
+    mandanten = list(result.scalars().all())
+
+    rows: list[dict] = []
+    empty_removed = 0
+    for m in mandanten:
+        if m.IDParty in junk_ids:
+            continue
+        if _is_clean(m.FiscalCode):
+            empty_removed += 1
+            continue
+        cc = (m.CountryCode or "").strip().upper()
+        is_org = str(m.IsOrganisation or "").strip() in _TRUE_STRINGS
+        is_ind = str(m.IsIndividual or "").strip() in _TRUE_STRINGS
+        entity_type = "ORG" if is_org else ("IND" if is_ind else "GENERIC")
+        sap_code = sap_code_by_key.get((cc, entity_type))
+        if not sap_code:
+            continue
+        clean_fc = re.sub(r"[/\-.,^\s]", "", m.FiscalCode.strip().upper())
+        rows.append(_migration_row(m.IDParty, clean_fc, sap_code, cc))
+
+    await _save_tax_migration_result(db, project_id, "STEUERNUMMER", rows)
+    await apply_taxtype_remap(db, project_id)
+    await apply_taxtype_row_fixes(db, project_id)
+    validation = await run_taxtype_validation(db, project_id)
+
+    return {
+        "total_raw": len(mandanten),
+        "total_junk_removed": len(junk_ids),
+        "total_empty_removed": empty_removed,
+        "migrated": len(rows),
+        "validation": validation,
+    }
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# TAXTYPE validation against the official SAP_TAX_CATEGORIES reference
+# ─────────────────────────────────────────────────────────────────────────
+
+
+async def run_taxtype_validation(db: AsyncSession, project_id: uuid.UUID) -> dict:
+    result = await db.execute(select(TaxMigrationResult).where(TaxMigrationResult.project_id == project_id))
+    tax_rows = list(result.scalars().all())
+    if not tax_rows:
+        return {"error": "No migration result yet - run the VAT or Steuernummer migration first."}
+
+    known = {c for c, _n, _d in SAP_TAX_CATEGORIES}
+    desc_map = {c: d for c, _n, d in SAP_TAX_CATEGORIES}
+    vat_cats: dict[str, set[str]] = {}
+    for code, _country, desc in SAP_TAX_CATEGORIES:
+        if "Umsatzsteuer-Id" in desc:
+            vat_cats.setdefault(code[:2], set()).add(code)
+
+    key_counts: dict[tuple[str, str], int] = {}
+    for r in tax_rows:
+        key = ((r.IDParty or "").strip(), (r.TAXTYPE or "").strip().upper())
+        key_counts[key] = key_counts.get(key, 0) + 1
+
+    findings = []
+    counts = {"unknown": 0, "obsolete": 0, "mismatch": 0, "vat_hint": 0, "collision": 0}
+    for r in tax_rows:
+        taxtype = (r.TAXTYPE or "").strip().upper()
+        cc = (r.CountryCode or "").strip().upper()
+        is_unknown = taxtype not in known
+        is_obsolete = taxtype in OBSOLETE_CATEGORIES
+        is_mismatch = (not is_unknown) and (not is_obsolete) and cc != "" and taxtype[:2] != cc
+        is_vat_hint = (
+            (not is_unknown) and (r.Migration or "").upper() == "VAT" and cc in vat_cats and taxtype not in vat_cats[cc]
+        )
+        is_collision = key_counts.get(((r.IDParty or "").strip(), taxtype), 0) > 1
+
+        labels = []
+        if is_unknown:
+            labels.append("UNKNOWN")
+            counts["unknown"] += 1
+        if is_obsolete:
+            labels.append("OBSOLETE")
+            counts["obsolete"] += 1
+        if is_mismatch:
+            labels.append("COUNTRY_MISMATCH")
+            counts["mismatch"] += 1
+        if is_vat_hint:
+            labels.append("VAT_CATEGORY_HINT")
+            counts["vat_hint"] += 1
+        if is_collision:
+            labels.append("KEY_COLLISION")
+            counts["collision"] += 1
+
+        for label in labels:
+            findings.append(
+                {
+                    "migration": r.Migration,
+                    "id_party": r.IDParty,
+                    "source_value": r.SourceValue,
+                    "taxtype": r.TAXTYPE,
+                    "country_code": r.CountryCode,
+                    "finding": label,
+                    "sap_description": desc_map.get(taxtype, ""),
+                }
+            )
+
+    return {"total": len(tax_rows), **counts, "findings": findings[:500]}
+
+
+def suggest_collision_code(country_code: str, current_code: str, migration: str) -> str | None:
+    """A sensible resolution for a KEY_COLLISION finding: for VAT rows, the
+    country's official VAT-ID category; for STEUERNUMMER rows, a non-VAT
+    category (preferring one whose description mentions "Steuer"). None
+    means no suggestion is available - leave the row as-is."""
+    cats = [(c, d) for c, _n, d in SAP_TAX_CATEGORIES if c[:2] == country_code and c not in OBSOLETE_CATEGORIES]
+    desc_by_code = dict(cats)
+    vat_set = {c for c, d in desc_by_code.items() if "Umsatzsteuer-Id" in d}
+    if migration.upper() == "VAT":
+        candidates = sorted(c for c in vat_set if c != current_code)
+        return candidates[0] if candidates else None
+    candidates = sorted(c for c in desc_by_code if c not in vat_set and c != current_code)
+    preferred = [c for c in candidates if "steuer" in desc_by_code[c].lower()]
+    ranked = preferred or candidates
+    return ranked[0] if ranked else None
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# TAXTYPE_REMAP: global source -> target code correction, re-applied on
+# every migration run
+# ─────────────────────────────────────────────────────────────────────────
+
+
+async def list_taxtype_remaps(db: AsyncSession, project_id: uuid.UUID) -> list[TaxtypeRemap]:
+    result = await db.execute(select(TaxtypeRemap).where(TaxtypeRemap.project_id == project_id).order_by(TaxtypeRemap.SourceCode))
+    return list(result.scalars().all())
+
+
+async def save_taxtype_remap_entry(db: AsyncSession, project_id: uuid.UUID, source_code: str, target_code: str) -> None:
+    source_code = source_code.strip().upper()
+    target_code = target_code.strip().upper()
+    existing = (
+        await db.execute(
+            select(TaxtypeRemap).where(TaxtypeRemap.project_id == project_id, TaxtypeRemap.SourceCode == source_code)
+        )
+    ).scalar_one_or_none()
+    if existing is None:
+        db.add(TaxtypeRemap(project_id=project_id, SourceCode=source_code, TargetCode=target_code))
+    else:
+        existing.TargetCode = target_code
+    await db.commit()
+
+
+async def delete_taxtype_remaps(db: AsyncSession, project_id: uuid.UUID, source_codes: list[str]) -> int:
+    codes = [c.strip().upper() for c in source_codes]
+    result = await db.execute(
+        delete(TaxtypeRemap).where(TaxtypeRemap.project_id == project_id, TaxtypeRemap.SourceCode.in_(codes))
+    )
+    await db.commit()
+    return result.rowcount or 0
+
+
+async def apply_taxtype_remap(db: AsyncSession, project_id: uuid.UUID) -> dict:
+    remaps_result = await db.execute(select(TaxtypeRemap).where(TaxtypeRemap.project_id == project_id))
+    remaps = {r.SourceCode: r.TargetCode for r in remaps_result.scalars().all()}
+    if not remaps:
+        return {"applied": 0}
+
+    tax_result = await db.execute(select(TaxMigrationResult).where(TaxMigrationResult.project_id == project_id))
+    applied = 0
+    for row in tax_result.scalars().all():
+        target = remaps.get((row.TAXTYPE or "").strip().upper())
+        if target:
+            row.TAXTYPE = target
+            applied += 1
+    if applied:
+        await db.commit()
+    return {"applied": applied}
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# TAXTYPE_ROW_FIX: row-level TAXTYPE correction (one specific IDParty +
+# Migration + source code), re-applied on every migration run
+# ─────────────────────────────────────────────────────────────────────────
+
+
+async def list_taxtype_row_fixes(db: AsyncSession, project_id: uuid.UUID) -> list[TaxtypeRowFix]:
+    result = await db.execute(
+        select(TaxtypeRowFix).where(TaxtypeRowFix.project_id == project_id).order_by(TaxtypeRowFix.IDParty)
+    )
+    return list(result.scalars().all())
+
+
+async def save_taxtype_row_fix_entry(
+    db: AsyncSession, project_id: uuid.UUID, id_party: str, migration: str, source_code: str, target_code: str
+) -> None:
+    id_party = id_party.strip()
+    migration = migration.strip().upper()
+    source_code = source_code.strip().upper()
+    target_code = target_code.strip().upper()
+    existing = (
+        await db.execute(
+            select(TaxtypeRowFix).where(
+                TaxtypeRowFix.project_id == project_id,
+                TaxtypeRowFix.IDParty == id_party,
+                TaxtypeRowFix.Migration == migration,
+                TaxtypeRowFix.SourceCode == source_code,
+            )
+        )
+    ).scalar_one_or_none()
+    if existing is None:
+        db.add(
+            TaxtypeRowFix(
+                project_id=project_id, IDParty=id_party, Migration=migration, SourceCode=source_code, TargetCode=target_code
+            )
+        )
+    else:
+        existing.TargetCode = target_code
+    await db.commit()
+
+
+async def delete_taxtype_row_fixes(db: AsyncSession, project_id: uuid.UUID, keys: list[tuple[str, str, str]]) -> int:
+    deleted = 0
+    for id_party, migration, source_code in keys:
+        result = await db.execute(
+            delete(TaxtypeRowFix).where(
+                TaxtypeRowFix.project_id == project_id,
+                TaxtypeRowFix.IDParty == id_party.strip(),
+                TaxtypeRowFix.Migration == migration.strip().upper(),
+                TaxtypeRowFix.SourceCode == source_code.strip().upper(),
+            )
+        )
+        deleted += result.rowcount or 0
+    await db.commit()
+    return deleted
+
+
+async def apply_taxtype_row_fixes(db: AsyncSession, project_id: uuid.UUID) -> dict:
+    fixes = await list_taxtype_row_fixes(db, project_id)
+    if not fixes:
+        return {"applied": 0}
+
+    tax_result = await db.execute(select(TaxMigrationResult).where(TaxMigrationResult.project_id == project_id))
+    by_key: dict[tuple[str, str, str], list[TaxMigrationResult]] = {}
+    for row in tax_result.scalars().all():
+        key = ((row.IDParty or "").strip(), (row.Migration or "").strip().upper(), (row.TAXTYPE or "").strip().upper())
+        by_key.setdefault(key, []).append(row)
+
+    applied = 0
+    for fix in fixes:
+        for row in by_key.get((fix.IDParty, fix.Migration, fix.SourceCode), []):
+            row.TAXTYPE = fix.TargetCode
+            applied += 1
+    if applied:
+        await db.commit()
+    return {"applied": applied}
