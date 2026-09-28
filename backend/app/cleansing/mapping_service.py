@@ -1,8 +1,9 @@
 """Mapping/Transform Studio - builds a new table out of one source Dataset
 by mapping each output column to a source column, a constant, a
-concatenation of several source columns, or a value looked up through a
-DatasetRelation on another dataset (see app/models/dataset.py::
-MappingDefinition for the field-spec shapes).
+concatenation of several source columns, a value looked up through a
+DatasetRelation on another dataset, or one half of a full name split into
+first/last name (see app/models/dataset.py::MappingDefinition for the
+field-spec shapes).
 
 The AI-assisted `suggest_mapping` below proposes a first-guess "column" kind
 for each target field name (by asking Claude Haiku to match target field
@@ -19,10 +20,11 @@ from anthropic import AsyncAnthropic
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.cleansing.name_split import llm_split_batch, name_needs_llm, split_name
 from app.config import get_settings
 from app.models.dataset import Dataset, DatasetRelation, DatasetRow, MappingDefinition
 
-FIELD_KINDS = ["column", "constant", "concat", "relation_lookup"]
+FIELD_KINDS = ["column", "constant", "concat", "relation_lookup", "name_split"]
 _SUGGEST_MODEL = "claude-haiku-4-5-20251001"
 
 
@@ -81,6 +83,11 @@ async def _validate_field(db: AsyncSession, project_id: uuid.UUID, source: Datas
         to_dataset = await db.get(Dataset, relation.to_dataset_id)
         if config.get("column") not in (to_dataset.columns if to_dataset else []):
             raise MappingError(f"{config.get('column')!r} is not a column of the related dataset.")
+    elif kind == "name_split":
+        if config.get("column") not in source.columns:
+            raise MappingError(f"{config.get('column')!r} is not a column of {source.name!r}.")
+        if config.get("part") not in ("first", "last"):
+            raise MappingError("A name_split field needs 'part' to be 'first' or 'last'.")
 
 
 async def create_mapping(
@@ -161,9 +168,20 @@ async def generate_mapping_rows(
                 relation = await db.get(DatasetRelation, uuid.UUID(relation_id))
                 relation_from_column[relation_id] = relation.from_column
 
+    # One name-split pass per source column used this way, so first_name and
+    # last_name fields off the same column share a single (possibly
+    # LLM-batched) computation instead of splitting every name twice.
+    name_splits: dict[str, list[dict]] = {}
+    for field in mapping.fields:
+        if field["kind"] != "name_split":
+            continue
+        column = field["config"]["column"]
+        if column not in name_splits:
+            name_splits[column] = await _split_column_names(source_rows, column)
+
     targets = [f["target"] for f in mapping.fields]
     out_rows = []
-    for row in source_rows:
+    for i, row in enumerate(source_rows):
         out = {}
         for field in mapping.fields:
             kind, config, target = field["kind"], field.get("config") or {}, field["target"]
@@ -179,9 +197,29 @@ async def generate_mapping_rows(
                 key = _clean(row.get(relation_from_column[relation_id]))
                 related = lookups[relation_id].get(key)
                 out[target] = related.get(config["column"]) if related else None
+            elif kind == "name_split":
+                split = name_splits[config["column"]][i]
+                out[target] = split["first_name"] if config["part"] == "first" else split["last_name"]
         out_rows.append(out)
 
     return targets, out_rows
+
+
+async def _split_column_names(rows: list[dict], column: str) -> list[dict]:
+    """One name_split()-per-row pass over a source column's values, with a
+    single batched Claude Haiku call up front for every distinct 3+-token
+    name in the column (rather than one LLM call per row) - same batching
+    shape as SAP-CARP's own preview_name_split."""
+    values = [_clean(row.get(column)) for row in rows]
+
+    llm_cache: dict[str, dict] = {}
+    llm_names = {name_needs_llm(v) for v in values} - {None}
+    settings = get_settings()
+    if llm_names and settings.anthropic_api_key:
+        client = AsyncAnthropic(api_key=settings.anthropic_api_key)
+        llm_cache = await llm_split_batch(client, list(llm_names))
+
+    return [split_name(v, llm_cache) for v in values]
 
 
 async def mapping_to_csv(db: AsyncSession, project_id: uuid.UUID, mapping_id: uuid.UUID) -> str:

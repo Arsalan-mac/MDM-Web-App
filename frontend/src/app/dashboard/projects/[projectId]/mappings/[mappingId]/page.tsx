@@ -46,6 +46,7 @@ const KIND_LABEL: Record<MappingFieldKind, string> = {
   constant: "Fixed value",
   concat: "Join several columns",
   relation_lookup: "Look up via a relation",
+  name_split: "Split a name (first/last)",
 };
 
 const textareaClassName =
@@ -72,6 +73,7 @@ export default function MappingDetailPage() {
   const [concatSeparator, setConcatSeparator] = useState(" ");
   const [relationId, setRelationId] = useState("");
   const [relationColumn, setRelationColumn] = useState("");
+  const [namePart, setNamePart] = useState<"first" | "last">("first");
   const [saving, setSaving] = useState(false);
 
   const [suggestText, setSuggestText] = useState("");
@@ -124,6 +126,7 @@ export default function MappingDetailPage() {
     setConcatSeparator(" ");
     setRelationId("");
     setRelationColumn("");
+    setNamePart("first");
   }
 
   function isValid(): boolean {
@@ -132,6 +135,7 @@ export default function MappingDetailPage() {
     if (kind === "constant") return true;
     if (kind === "concat") return concatColumns.length > 0;
     if (kind === "relation_lookup") return !!relationId && !!relationColumn;
+    if (kind === "name_split") return !!column;
     return false;
   }
 
@@ -164,8 +168,10 @@ export default function MappingDetailPage() {
         field = { target: target.trim(), kind, config: { value: constantValue } };
       } else if (kind === "concat") {
         field = { target: target.trim(), kind, config: { columns: concatColumns, separator: concatSeparator } };
-      } else {
+      } else if (kind === "relation_lookup") {
         field = { target: target.trim(), kind, config: { relation_id: relationId, column: relationColumn } };
+      } else {
+        field = { target: target.trim(), kind, config: { column, part: namePart } };
       }
       await persistFields([...mapping.fields, field]);
       resetForm();
@@ -273,6 +279,8 @@ export default function MappingDetailPage() {
         const rel = relations.find((r) => r.id === c.relation_id);
         return rel ? `= ${datasetName(rel.to_dataset_id)}.${c.column} (via "${rel.name}")` : "= (relation deleted)";
       }
+      case "name_split":
+        return `= ${c.part === "first" ? "first" : "last"} name from ${c.column}`;
       default:
         return "";
     }
@@ -420,6 +428,7 @@ export default function MappingDetailPage() {
                     setConcatColumns([]);
                     setRelationId("");
                     setRelationColumn("");
+                    setNamePart("first");
                   }}
                 >
                   {(Object.keys(KIND_LABEL) as MappingFieldKind[]).map((k) => (
@@ -442,6 +451,33 @@ export default function MappingDetailPage() {
                     ))}
                   </Select>
                 </div>
+              )}
+
+              {kind === "name_split" && (
+                <>
+                  <div>
+                    <Label>Source column (full name)</Label>
+                    <Select value={column} onChange={(e) => setColumn(e.target.value)}>
+                      <option value="">— select —</option>
+                      {source?.columns.map((col) => (
+                        <option key={col} value={col}>
+                          {col}
+                        </option>
+                      ))}
+                    </Select>
+                  </div>
+                  <div>
+                    <Label>Which part?</Label>
+                    <Select value={namePart} onChange={(e) => setNamePart(e.target.value as "first" | "last")}>
+                      <option value="first">First name</option>
+                      <option value="last">Last name</option>
+                    </Select>
+                  </div>
+                  <p className="text-xs text-ink-500 sm:col-span-2">
+                    Splits on comma or word boundaries; ambiguous 3+-word names get an AI-assisted split. Add
+                    this field twice (once per part) to get both First name and Last name columns.
+                  </p>
+                </>
               )}
 
               {kind === "constant" && (

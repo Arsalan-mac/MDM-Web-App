@@ -22,10 +22,12 @@ import uuid
 
 import pandas as pd
 from anthropic import AsyncAnthropic
-from nameparser import HumanName
 from sqlalchemy import delete, func, insert, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.cleansing.name_split import llm_split_batch as _llm_split_batch
+from app.cleansing.name_split import name_needs_llm as _name_needs_llm
+from app.cleansing.name_split import split_name as _split_name
 from app.config import get_settings
 from app.models.tenant import FieldMapping, Mandant, SapStammdaten
 
@@ -44,10 +46,6 @@ _MANDANT_COLUMN_TO_ATTR = {
     for attr, col in Mandant.__mapper__.columns.items()
     if col.name not in _SYSTEM_MANDANT_COLUMNS
 }
-
-_NAME_MODEL = "claude-haiku-4-5-20251001"
-_BATCH_SIZE = 50
-
 
 def _is_clean(val) -> bool:
     if val is None:
@@ -294,87 +292,11 @@ async def run_name_distribution(db: AsyncSession, project_id: uuid.UUID, chunk_s
 
 # ─────────────────────────────────────────────────────────────────────────
 # Step 3: Name Splitting (nameparser + Claude Haiku fallback for 3+-token
-# names) - writes Mandant.FirstName/LastName
+# names) - writes Mandant.FirstName/LastName. The actual splitting logic
+# lives in app/cleansing/name_split.py (shared with Mapping Studio's
+# "name_split" field kind); imported above under this module's old private
+# names so its existing tests and the functions below stay unchanged.
 # ─────────────────────────────────────────────────────────────────────────
-
-
-def _name_needs_llm(company_name: str) -> str | None:
-    name = company_name.strip()
-    if not name or "," in name:
-        return None
-    n = HumanName(name)
-    if n.title:
-        return None
-    tokens = [t for t in " ".join(filter(None, [n.first, n.middle, n.last])).split() if t]
-    return " ".join(tokens) if len(tokens) >= 3 else None
-
-
-def _split_name(company_name: str, llm_cache: dict[str, dict] | None = None) -> dict:
-    llm_cache = llm_cache or {}
-    name = company_name.strip()
-    if not name:
-        return {"first_name": "", "last_name": "", "method": "unklar"}
-
-    if "," in name:
-        n = HumanName(name)
-        given = " ".join(filter(None, [n.first, n.middle])).strip()
-        return {"first_name": given, "last_name": n.last, "method": "komma"}
-
-    n = HumanName(name)
-    tokens = [t for t in " ".join(filter(None, [n.first, n.middle, n.last])).split() if t]
-    if not tokens:
-        return {"first_name": "", "last_name": "", "method": "unklar"}
-    if len(tokens) == 1:
-        return {"first_name": "", "last_name": tokens[0], "method": "unklar"}
-
-    had_title = bool(n.title)
-    if not had_title and len(tokens) >= 3:
-        token_name = " ".join(tokens)
-        if token_name in llm_cache:
-            return llm_cache[token_name]
-        # No LLM result available (not configured, or this call failed) -
-        # same first-token/rest fallback the original app uses on an LLM error.
-        return {"first_name": tokens[0], "last_name": " ".join(tokens[1:]), "method": "unklar"}
-
-    method = "nameparser-titel" if had_title else "2-token"
-    return {"first_name": " ".join(tokens[:-1]), "last_name": tokens[-1], "method": method}
-
-
-async def _llm_split_batch(client: AsyncAnthropic, names: list[str]) -> dict[str, dict]:
-    cache: dict[str, dict] = {}
-    chunks = [names[i : i + _BATCH_SIZE] for i in range(0, len(names), _BATCH_SIZE)]
-    for chunk in chunks:
-        numbered = "\n".join(f"{i + 1}. {n}" for i, n in enumerate(chunk))
-        prompt = (
-            "Trenne diese deutschen Namen in Vorname und Nachname.\n"
-            "Antworte NUR mit nummerierten Zeilen im Format: N. VORNAME|NACHNAME\n"
-            "Keine weiteren Erklärungen.\n\n" + numbered
-        )
-        try:
-            msg = await client.messages.create(
-                model=_NAME_MODEL,
-                max_tokens=_BATCH_SIZE * 25,
-                messages=[{"role": "user", "content": prompt}],
-            )
-            text = next((b.text for b in msg.content if b.type == "text"), "")
-            for line in text.strip().splitlines():
-                line = line.strip()
-                dot_pos = line.find(". ")
-                if dot_pos == -1:
-                    continue
-                try:
-                    idx = int(line[:dot_pos]) - 1
-                except ValueError:
-                    continue
-                if idx < 0 or idx >= len(chunk):
-                    continue
-                rest = line[dot_pos + 2 :]
-                if "|" in rest:
-                    vorname, nachname = rest.split("|", 1)
-                    cache[chunk[idx]] = {"first_name": vorname.strip(), "last_name": nachname.strip(), "method": "llm"}
-        except Exception:
-            pass  # Falls through to _split_name's per-name "unklar" fallback.
-    return cache
 
 
 def _name_split_candidates_stmt(project_id: uuid.UUID):

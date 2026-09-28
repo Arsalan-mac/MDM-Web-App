@@ -1167,7 +1167,7 @@ export async function deleteCustomCheck(
 
 // ── Mapping/Transform Studio ──────────────────────────────────────────────
 
-export type MappingFieldKind = "column" | "constant" | "concat" | "relation_lookup";
+export type MappingFieldKind = "column" | "constant" | "concat" | "relation_lookup" | "name_split";
 
 export type MappingField = {
   target: string;

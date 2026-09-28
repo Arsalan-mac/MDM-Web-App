@@ -149,6 +149,15 @@ class MappingDefinition(TenantBase):
                            DatasetRelation (this mapping's source dataset must
                            be that relation's from_dataset), the first place
                            Relations get used for something other than checks.
+      - "name_split":     config={"column": <source column holding a full
+                           name>, "part": "first" | "last"} - splits a name
+                           into first/last name (rule-based, with a Claude
+                           Haiku fallback for ambiguous 3+-token names; see
+                           app/cleansing/name_split.py), the same logic
+                           SAP-CARP's Name Splitting step uses, generalized
+                           to any dataset/column instead of just Mandant.
+                           CompanyName. Add two fields (one per part) to get
+                           both halves out of the one source column.
 
     No Python or SQL from the user - the AI-assisted suggest endpoint
     (app/cleansing/mapping_service.py::suggest_mapping) proposes "column"
