@@ -4,7 +4,7 @@ import { useAuth } from "@clerk/nextjs";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
-import { ArrowLeft, Database, Table2, Upload } from "lucide-react";
+import { ArrowLeft, Database, GitBranch, Table2, Upload } from "lucide-react";
 import { listDatasets, uploadDataset, type Dataset } from "@/lib/api";
 import { Alert, Button, Card, CardBody, CardDescription, CardHeader, CardTitle, EmptyState, Input, Label } from "@/components/ui";
 
@@ -68,17 +68,26 @@ export default function DatasetsPage() {
         Back to project
       </Link>
 
-      <div className="flex items-center gap-3">
-        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-brand-100 text-brand-700">
-          <Database className="h-5 w-5" />
+      <div className="flex items-start justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-brand-100 text-brand-700">
+            <Database className="h-5 w-5" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-semibold text-ink-900">Datasets</h1>
+            <p className="text-sm text-ink-500">
+              Upload any file, in any shape — no fixed schema. Map its columns once, then run whichever
+              checks you want from the catalog.
+            </p>
+          </div>
         </div>
-        <div>
-          <h1 className="text-2xl font-semibold text-ink-900">Datasets</h1>
-          <p className="text-sm text-ink-500">
-            Upload any file, in any shape — no fixed schema. Map its columns once, then run whichever
-            checks you want from the catalog.
-          </p>
-        </div>
+        <Link
+          href={`/dashboard/projects/${projectId}/relations`}
+          className="inline-flex shrink-0 items-center gap-2 rounded-lg border border-ink-300 bg-white px-4 py-2 text-sm font-medium text-ink-800 hover:bg-ink-50"
+        >
+          <GitBranch className="h-4 w-4 text-brand-600" />
+          Relations
+        </Link>
       </div>
 
       <Card>

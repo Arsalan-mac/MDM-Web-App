@@ -997,6 +997,7 @@ export type CheckDefinition = {
   required_roles: string[];
   optional_roles: string[];
   missing_roles: string[];
+  custom: boolean;
 };
 
 export function listAvailableChecks(
@@ -1064,4 +1065,102 @@ export function dismissFinding(
     token,
     { method: "POST" },
   );
+}
+
+// ── Dataset Relations (1:1 / 1:N / N:N links between datasets) ──────────
+
+export type Cardinality = "one_to_one" | "one_to_many" | "many_to_many";
+
+export type DatasetRelation = {
+  id: string;
+  name: string;
+  from_dataset_id: string;
+  from_column: string;
+  to_dataset_id: string;
+  to_column: string;
+  cardinality: Cardinality;
+};
+
+export function listRelations(token: string, projectId: string): Promise<DatasetRelation[]> {
+  return apiFetch<DatasetRelation[]>(`/projects/${projectId}/relations`, token);
+}
+
+export function createRelation(
+  token: string,
+  projectId: string,
+  payload: {
+    name: string;
+    from_dataset_id: string;
+    from_column: string;
+    to_dataset_id: string;
+    to_column: string;
+    cardinality: Cardinality;
+  },
+): Promise<DatasetRelation> {
+  return apiFetch<DatasetRelation>(`/projects/${projectId}/relations`, token, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deleteRelation(token: string, projectId: string, relationId: string): Promise<void> {
+  const response = await fetch(`${API_URL}/projects/${projectId}/relations/${relationId}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${token}` },
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    const body = await response.text();
+    throw new ApiError(response.status, `API failed: ${response.status} ${body}`);
+  }
+}
+
+// ── Custom (no-code) Checks ──────────────────────────────────────────────
+
+export type CustomCheckRuleType = "required" | "regex" | "in_list" | "range" | "unique" | "cross_dataset_exists";
+
+export type CustomCheck = {
+  id: string;
+  dataset_id: string;
+  name: string;
+  rule_type: CustomCheckRuleType;
+  params: Record<string, unknown>;
+  severity: "error" | "warning" | "info";
+};
+
+export function listRuleTypes(token: string, projectId: string): Promise<CustomCheckRuleType[]> {
+  return apiFetch<CustomCheckRuleType[]>(`/projects/${projectId}/datasets/rule-types`, token);
+}
+
+export function listCustomChecks(token: string, projectId: string, datasetId: string): Promise<CustomCheck[]> {
+  return apiFetch<CustomCheck[]>(`/projects/${projectId}/datasets/${datasetId}/custom-checks`, token);
+}
+
+export function createCustomCheck(
+  token: string,
+  projectId: string,
+  datasetId: string,
+  payload: { name: string; rule_type: CustomCheckRuleType; params: Record<string, unknown>; severity: string },
+): Promise<CustomCheck> {
+  return apiFetch<CustomCheck>(`/projects/${projectId}/datasets/${datasetId}/custom-checks`, token, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deleteCustomCheck(
+  token: string,
+  projectId: string,
+  datasetId: string,
+  checkId: string,
+): Promise<void> {
+  const response = await fetch(`${API_URL}/projects/${projectId}/datasets/${datasetId}/custom-checks/${checkId}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${token}` },
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    const body = await response.text();
+    throw new ApiError(response.status, `API failed: ${response.status} ${body}`);
+  }
 }

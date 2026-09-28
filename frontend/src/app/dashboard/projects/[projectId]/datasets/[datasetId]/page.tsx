@@ -4,18 +4,26 @@ import { useAuth } from "@clerk/nextjs";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
-import { ArrowLeft, Check, ListChecks, Table2, X } from "lucide-react";
+import { ArrowLeft, Check, ListChecks, Plus, Table2, Trash2, Wand2, X } from "lucide-react";
 import {
   acceptFinding,
+  createCustomCheck,
+  deleteCustomCheck,
   dismissFinding,
   getDataset,
   listAvailableChecks,
+  listCustomChecks,
   listFindings,
+  listRelations,
+  listRuleTypes,
   runChecks,
   updateRoleMapping,
   type CheckDefinition,
   type CheckFinding,
+  type CustomCheck,
+  type CustomCheckRuleType,
   type DatasetDetail,
+  type DatasetRelation,
 } from "@/lib/api";
 import {
   Alert,
@@ -27,6 +35,8 @@ import {
   CardHeader,
   CardTitle,
   EmptyState,
+  Input,
+  Label,
   Select,
   Table,
   Tbody,
@@ -43,6 +53,24 @@ const SEVERITY_TONE: Record<CheckFinding["severity"], "danger" | "warning" | "br
   warning: "warning",
   info: "brand",
 };
+
+const RULE_TYPE_LABEL: Record<CustomCheckRuleType, string> = {
+  required: "Required (not empty)",
+  regex: "Matches a pattern (regex)",
+  in_list: "One of a fixed list",
+  range: "Within a numeric range",
+  unique: "Must be unique",
+  cross_dataset_exists: "Must exist in another dataset",
+};
+
+const ALL_RULE_TYPES: CustomCheckRuleType[] = [
+  "required",
+  "regex",
+  "in_list",
+  "range",
+  "unique",
+  "cross_dataset_exists",
+];
 
 function RoleMappingEditor({
   dataset,
@@ -144,6 +172,305 @@ function RoleMappingEditor({
         <Button size="sm" onClick={handleSave} disabled={saving}>
           {saving ? "Saving…" : "Save mapping"}
         </Button>
+      </CardBody>
+    </Card>
+  );
+}
+
+function CustomChecksEditor({ dataset, onChanged }: { dataset: DatasetDetail; onChanged: () => void }) {
+  const { projectId } = useParams<{ projectId: string; datasetId: string }>();
+  const { getToken } = useAuth();
+
+  const [customChecks, setCustomChecks] = useState<CustomCheck[]>([]);
+  const [ruleTypes, setRuleTypes] = useState<CustomCheckRuleType[]>([]);
+  const [relations, setRelations] = useState<DatasetRelation[]>([]);
+  const [error, setError] = useState<string | null>(null);
+
+  const [name, setName] = useState("");
+  const [ruleType, setRuleType] = useState<CustomCheckRuleType>("required");
+  const [column, setColumn] = useState("");
+  const [pattern, setPattern] = useState("");
+  const [valuesText, setValuesText] = useState("");
+  const [min, setMin] = useState("");
+  const [max, setMax] = useState("");
+  const [relationId, setRelationId] = useState("");
+  const [severity, setSeverity] = useState<"error" | "warning" | "info">("warning");
+  const [saving, setSaving] = useState(false);
+
+  async function load() {
+    const token = await getToken();
+    if (!token) return;
+    try {
+      const [cc, rt, rels] = await Promise.all([
+        listCustomChecks(token, projectId, dataset.id),
+        listRuleTypes(token, projectId),
+        listRelations(token, projectId),
+      ]);
+      setCustomChecks(cc);
+      setRuleTypes(rt);
+      setRelations(rels.filter((r) => r.from_dataset_id === dataset.id));
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load custom checks.");
+    }
+  }
+
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dataset.id]);
+
+  function resetForm() {
+    setName("");
+    setRuleType("required");
+    setColumn("");
+    setPattern("");
+    setValuesText("");
+    setMin("");
+    setMax("");
+    setRelationId("");
+    setSeverity("warning");
+  }
+
+  function isValid() {
+    if (ruleType === "cross_dataset_exists") return !!relationId;
+    if (!column) return false;
+    if (ruleType === "regex") return !!pattern;
+    if (ruleType === "in_list") return !!valuesText.trim();
+    return true;
+  }
+
+  async function handleCreate(e: React.FormEvent) {
+    e.preventDefault();
+    if (!isValid()) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const token = await getToken();
+      if (!token) throw new Error("Not signed in.");
+
+      let params: Record<string, unknown>;
+      switch (ruleType) {
+        case "regex":
+          params = { column, pattern };
+          break;
+        case "in_list":
+          params = { column, values: valuesText.split(",").map((v) => v.trim()).filter(Boolean) };
+          break;
+        case "range":
+          params = {
+            column,
+            min: min.trim() === "" ? null : Number(min),
+            max: max.trim() === "" ? null : Number(max),
+          };
+          break;
+        case "cross_dataset_exists":
+          params = { relation_id: relationId };
+          break;
+        default:
+          params = { column };
+      }
+
+      const label = name.trim() || `${RULE_TYPE_LABEL[ruleType]}${column ? ` — ${column}` : ""}`;
+      await createCustomCheck(token, projectId, dataset.id, {
+        name: label,
+        rule_type: ruleType,
+        params,
+        severity,
+      });
+      resetForm();
+      await load();
+      onChanged();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to create check.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleDelete(id: string) {
+    const token = await getToken();
+    if (!token) return;
+    await deleteCustomCheck(token, projectId, dataset.id, id);
+    await load();
+    onChanged();
+  }
+
+  function describe(c: CustomCheck): string {
+    const p = c.params as Record<string, unknown>;
+    switch (c.rule_type) {
+      case "required":
+        return `${p.column} must not be empty`;
+      case "regex":
+        return `${p.column} must match ${p.pattern}`;
+      case "in_list":
+        return `${p.column} must be one of: ${(p.values as string[] | undefined)?.join(", ")}`;
+      case "range":
+        return `${p.column} must be between ${p.min ?? "−∞"} and ${p.max ?? "∞"}`;
+      case "unique":
+        return `${p.column} must be unique`;
+      case "cross_dataset_exists": {
+        const rel = relations.find((r) => r.id === p.relation_id);
+        return rel
+          ? `${rel.from_column} must exist in ${rel.to_column} (via "${rel.name}")`
+          : "Must exist in the related dataset";
+      }
+      default:
+        return "";
+    }
+  }
+
+  const availableRuleTypes = ruleTypes.length > 0 ? ruleTypes : ALL_RULE_TYPES;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Wand2 className="h-4 w-4 text-ink-400" />
+          Custom checks
+        </CardTitle>
+        <CardDescription>
+          Define your own checks — no code required. Once added they show up in the Check Catalog below,
+          right alongside the built-in ones.
+        </CardDescription>
+      </CardHeader>
+      <CardBody className="space-y-4">
+        {customChecks.length > 0 && (
+          <div className="space-y-2">
+            {customChecks.map((c) => (
+              <div
+                key={c.id}
+                className="flex items-center justify-between gap-3 rounded-lg border border-ink-100 px-3 py-2.5"
+              >
+                <div>
+                  <p className="text-sm font-medium text-ink-900">{c.name}</p>
+                  <p className="text-xs text-ink-500">{describe(c)}</p>
+                </div>
+                <div className="flex shrink-0 items-center gap-2">
+                  <Badge tone={SEVERITY_TONE[c.severity]}>{c.severity}</Badge>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="text-red-600 hover:bg-red-50"
+                    onClick={() => handleDelete(c.id)}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <form onSubmit={handleCreate} className="space-y-3 rounded-lg border border-ink-100 bg-ink-50/40 p-4">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div>
+              <Label>Rule type</Label>
+              <Select
+                value={ruleType}
+                onChange={(e) => {
+                  setRuleType(e.target.value as CustomCheckRuleType);
+                  setColumn("");
+                  setPattern("");
+                  setValuesText("");
+                  setMin("");
+                  setMax("");
+                  setRelationId("");
+                }}
+              >
+                {availableRuleTypes.map((rt) => (
+                  <option key={rt} value={rt}>
+                    {RULE_TYPE_LABEL[rt]}
+                  </option>
+                ))}
+              </Select>
+            </div>
+            <div>
+              <Label>Name (optional)</Label>
+              <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. VAT ID required" />
+            </div>
+
+            {ruleType === "cross_dataset_exists" ? (
+              <div className="sm:col-span-2">
+                <Label>Relation</Label>
+                <Select value={relationId} onChange={(e) => setRelationId(e.target.value)}>
+                  <option value="">— select —</option>
+                  {relations.map((r) => (
+                    <option key={r.id} value={r.id}>
+                      {r.name}
+                    </option>
+                  ))}
+                </Select>
+                {relations.length === 0 && (
+                  <p className="mt-1 text-xs text-ink-500">
+                    No relations start from this dataset yet — create one on the Relations page first.
+                  </p>
+                )}
+              </div>
+            ) : (
+              <div>
+                <Label>Column</Label>
+                <Select value={column} onChange={(e) => setColumn(e.target.value)}>
+                  <option value="">— select —</option>
+                  {dataset.columns.map((col) => (
+                    <option key={col} value={col}>
+                      {col}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+            )}
+
+            {ruleType === "regex" && (
+              <div>
+                <Label>Pattern (regex)</Label>
+                <Input
+                  value={pattern}
+                  onChange={(e) => setPattern(e.target.value)}
+                  placeholder="e.g. ^[A-Z]{2}\d{9}$"
+                />
+              </div>
+            )}
+
+            {ruleType === "in_list" && (
+              <div>
+                <Label>Allowed values (comma-separated)</Label>
+                <Input
+                  value={valuesText}
+                  onChange={(e) => setValuesText(e.target.value)}
+                  placeholder="e.g. active, inactive, pending"
+                />
+              </div>
+            )}
+
+            {ruleType === "range" && (
+              <>
+                <div>
+                  <Label>Min (optional)</Label>
+                  <Input type="number" value={min} onChange={(e) => setMin(e.target.value)} placeholder="e.g. 0" />
+                </div>
+                <div>
+                  <Label>Max (optional)</Label>
+                  <Input type="number" value={max} onChange={(e) => setMax(e.target.value)} placeholder="e.g. 120" />
+                </div>
+              </>
+            )}
+
+            <div>
+              <Label>Severity</Label>
+              <Select value={severity} onChange={(e) => setSeverity(e.target.value as "error" | "warning" | "info")}>
+                <option value="error">Error</option>
+                <option value="warning">Warning</option>
+                <option value="info">Info</option>
+              </Select>
+            </div>
+          </div>
+          <Button type="submit" size="sm" disabled={!isValid() || saving}>
+            <Plus className="h-4 w-4" />
+            {saving ? "Adding…" : "Add check"}
+          </Button>
+        </form>
+        {error && <Alert tone="danger">{error}</Alert>}
       </CardBody>
     </Card>
   );
@@ -294,6 +621,8 @@ export default function DatasetDetailPage() {
           reload();
         }}
       />
+
+      <CustomChecksEditor dataset={dataset} onChanged={reload} />
 
       <Card>
         <CardHeader>

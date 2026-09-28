@@ -12,6 +12,7 @@ from app.api.routers import (
     projects,
     quality,
     register_cleansing,
+    relations,
     report,
     sap_carp,
     sap_template,
@@ -47,3 +48,4 @@ app.include_router(register_cleansing.router)
 app.include_router(delete_records.router)
 app.include_router(report.router)
 app.include_router(datasets.router)
+app.include_router(relations.router)

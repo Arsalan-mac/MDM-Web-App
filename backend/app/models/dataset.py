@@ -67,6 +67,71 @@ class DatasetRow(TenantBase):
     data: Mapped[dict] = mapped_column(JSONB, default=dict)
 
 
+class DatasetRelation(TenantBase):
+    """A named, reusable link between two datasets - the generic analogue
+    of e.g. SAP's KNA1 (customer master) to KNVV (sales areas): one column
+    in each dataset that should hold matching values, and the cardinality
+    the relationship is supposed to have.
+
+    Doesn't enforce anything on its own - it's a declaration other things
+    read: a `cross_dataset_exists` custom check (app/checks/custom.py) uses
+    one to check every row on the "from" side has a match on the "to"
+    side (the generic form of the old fixed-schema Geisterobjekte check),
+    and the planned Mapping/Transform Studio will use the same relations
+    to join data across tables when building a target field.
+    """
+
+    __tablename__ = "dataset_relations"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    project_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("projects.id"), index=True)
+
+    name: Mapped[str] = mapped_column(String(255))
+
+    from_dataset_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("datasets.id"), index=True)
+    from_column: Mapped[str] = mapped_column(String(255))
+
+    to_dataset_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("datasets.id"), index=True)
+    to_column: Mapped[str] = mapped_column(String(255))
+
+    # one_to_one | one_to_many | many_to_many - from_dataset's side first,
+    # e.g. one Customer -> many SalesAreas is "one_to_many".
+    cardinality: Mapped[str] = mapped_column(String(16))
+
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class CustomCheckDefinition(TenantBase):
+    """A user-defined check - no Python required. `rule_type` picks one of
+    a small fixed set of generic rule interpreters (app/checks/custom.py:
+    required, regex, in_list, range, unique, cross_dataset_exists), and
+    `params` configures it (which column, the pattern/list/range, or - for
+    cross_dataset_exists - which DatasetRelation to check against).
+
+    Scoped to one dataset (`dataset_id`) even for cross_dataset_exists,
+    since a finding is always reported against a row of *some* dataset -
+    the relation's from_dataset must match this check's dataset_id for
+    that rule type.
+
+    Every dataset can have zero of these - checks are always opt-in, never
+    assumed, which is the whole point: not every table needs (or has) any
+    checks defined for it.
+    """
+
+    __tablename__ = "custom_check_definitions"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    project_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("projects.id"), index=True)
+    dataset_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("datasets.id"), index=True)
+
+    name: Mapped[str] = mapped_column(String(255))
+    rule_type: Mapped[str] = mapped_column(String(32))
+    params: Mapped[dict] = mapped_column(JSONB, default=dict)
+    severity: Mapped[str] = mapped_column(String(16), default="warning")  # error | warning | info
+
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class CheckFinding(TenantBase):
     """One finding from running a Check (app/checks/base.py) against a
     Dataset row. Deliberately generic (a `check_key` string, not a table
