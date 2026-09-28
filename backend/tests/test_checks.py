@@ -15,8 +15,10 @@ def test_catalog_lists_all_builtin_checks():
         "completeness",
         "duplicate_detection",
         "email_format",
+        "fiscal_code_format",
         "phone_format",
         "register_number_format",
+        "vat_format",
         "website_format",
     }
 
@@ -115,3 +117,54 @@ def test_duplicate_detection_group_by_keeps_different_groups_apart():
 
 def test_get_check_returns_none_for_unknown_key():
     assert get_check("nonexistent") is None
+
+
+def test_vat_format_uses_self_describing_prefix_without_a_country_column():
+    rows = [{"tax_id": "DE123456789"}, {"tax_id": "DE12"}, {"tax_id": ""}]
+    findings = run_check("vat_format", rows, {"vat_number": "tax_id"})
+    assert len(findings) == 1
+    assert findings[0].row_index == 1
+    assert findings[0].field == "tax_id"
+
+
+def test_vat_format_uses_the_mapped_country_column_when_present():
+    rows = [{"tax_id": "DE123456789", "cc": "DE"}]
+    findings = run_check("vat_format", rows, {"vat_number": "tax_id", "country_code": "cc"})
+    assert findings == []
+
+
+def test_vat_format_flags_unrecognized_country_prefix():
+    rows = [{"tax_id": "ZZ999"}]
+    findings = run_check("vat_format", rows, {"vat_number": "tax_id"})
+    assert len(findings) == 1
+    assert "Unrecognized country prefix" in findings[0].message
+
+
+def test_fiscal_code_format_valid_value_produces_no_finding():
+    rows = [{"tin": "12345678901", "cc": "BR", "kind": "IND"}]
+    findings = run_check(
+        "fiscal_code_format", rows, {"fiscal_code": "tin", "country_code": "cc", "entity_type": "kind"}
+    )
+    assert findings == []
+
+
+def test_fiscal_code_format_flags_a_value_not_matching_the_country_rule():
+    rows = [{"tin": "notanumber", "cc": "BR", "kind": "IND"}]
+    findings = run_check(
+        "fiscal_code_format", rows, {"fiscal_code": "tin", "country_code": "cc", "entity_type": "kind"}
+    )
+    assert len(findings) == 1
+    assert findings[0].field == "tin"
+
+
+def test_fiscal_code_format_flags_unrecognized_country():
+    rows = [{"tin": "12345", "cc": "ZZ"}]
+    findings = run_check("fiscal_code_format", rows, {"fiscal_code": "tin", "country_code": "cc"})
+    assert len(findings) == 1
+    assert "Unrecognized country code" in findings[0].message
+
+
+def test_fiscal_code_format_defaults_to_generic_entity_type_when_unmapped():
+    rows = [{"tin": "12345678901", "cc": "BR"}]
+    findings = run_check("fiscal_code_format", rows, {"fiscal_code": "tin", "country_code": "cc"})
+    assert findings == []

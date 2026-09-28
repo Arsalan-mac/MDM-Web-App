@@ -1,4 +1,11 @@
-from app.models.dataset import CheckFinding, CustomCheckDefinition, Dataset, DatasetRelation, DatasetRow
+from app.models.dataset import (
+    CheckFinding,
+    CustomCheckDefinition,
+    Dataset,
+    DatasetRelation,
+    DatasetRow,
+    MappingDefinition,
+)
 from app.models.public import Tenant, TenantUser
 from app.models.tenant import PIPELINE_STAGES, Project, Stage
 
@@ -13,4 +20,5 @@ __all__ = [
     "CheckFinding",
     "DatasetRelation",
     "CustomCheckDefinition",
+    "MappingDefinition",
 ]

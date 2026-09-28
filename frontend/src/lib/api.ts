@@ -1164,3 +1164,97 @@ export async function deleteCustomCheck(
     throw new ApiError(response.status, `API failed: ${response.status} ${body}`);
   }
 }
+
+// ── Mapping/Transform Studio ──────────────────────────────────────────────
+
+export type MappingFieldKind = "column" | "constant" | "concat" | "relation_lookup";
+
+export type MappingField = {
+  target: string;
+  kind: MappingFieldKind;
+  config: Record<string, unknown>;
+};
+
+export type Mapping = {
+  id: string;
+  name: string;
+  source_dataset_id: string;
+  fields: MappingField[];
+};
+
+export function listMappings(token: string, projectId: string): Promise<Mapping[]> {
+  return apiFetch<Mapping[]>(`/projects/${projectId}/mappings`, token);
+}
+
+export function getMapping(token: string, projectId: string, mappingId: string): Promise<Mapping> {
+  return apiFetch<Mapping>(`/projects/${projectId}/mappings/${mappingId}`, token);
+}
+
+export function createMapping(
+  token: string,
+  projectId: string,
+  payload: { name: string; source_dataset_id: string; fields?: MappingField[] },
+): Promise<Mapping> {
+  return apiFetch<Mapping>(`/projects/${projectId}/mappings`, token, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function updateMappingFields(
+  token: string,
+  projectId: string,
+  mappingId: string,
+  fields: MappingField[],
+): Promise<Mapping> {
+  return apiFetch<Mapping>(`/projects/${projectId}/mappings/${mappingId}/fields`, token, {
+    method: "PUT",
+    body: JSON.stringify({ fields }),
+  });
+}
+
+export async function deleteMapping(token: string, projectId: string, mappingId: string): Promise<void> {
+  const response = await fetch(`${API_URL}/projects/${projectId}/mappings/${mappingId}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${token}` },
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    const body = await response.text();
+    throw new ApiError(response.status, `API failed: ${response.status} ${body}`);
+  }
+}
+
+export type MappingPreview = {
+  columns: string[];
+  rows: Record<string, string | null>[];
+  total_rows: number;
+};
+
+export function previewMapping(token: string, projectId: string, mappingId: string): Promise<MappingPreview> {
+  return apiFetch<MappingPreview>(`/projects/${projectId}/mappings/${mappingId}/preview`, token);
+}
+
+export async function downloadMappingCsv(token: string, projectId: string, mappingId: string): Promise<Blob> {
+  const response = await fetch(`${API_URL}/projects/${projectId}/mappings/${mappingId}/export.csv`, {
+    headers: { Authorization: `Bearer ${token}` },
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    const body = await response.text();
+    throw new ApiError(response.status, `Export failed: ${response.status} ${body}`);
+  }
+  return response.blob();
+}
+
+export function suggestMapping(
+  token: string,
+  projectId: string,
+  sourceDatasetId: string,
+  targetFields: string[],
+): Promise<Record<string, string | null>> {
+  return apiFetch<Record<string, string | null>>(`/projects/${projectId}/mappings/suggest`, token, {
+    method: "POST",
+    body: JSON.stringify({ source_dataset_id: sourceDatasetId, target_fields: targetFields }),
+  });
+}

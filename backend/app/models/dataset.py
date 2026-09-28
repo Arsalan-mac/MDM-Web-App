@@ -132,6 +132,41 @@ class CustomCheckDefinition(TenantBase):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+class MappingDefinition(TenantBase):
+    """A saved recipe for building a new table out of one source Dataset -
+    the generic analogue of the old fixed SAP Template Migration step (BUT000/
+    ADRC mapping), but for any target shape, not just an SAP import file.
+
+    `fields` is an ordered list of target-field specs, each
+    {"target": <output column name>, "kind": ..., "config": {...}}:
+      - "column":         config={"column": <source column>} - copy verbatim.
+      - "constant":       config={"value": <literal>} - same value every row.
+      - "concat":         config={"columns": [...], "separator": " "} - join
+                           several source columns into one output value.
+      - "relation_lookup": config={"relation_id": <DatasetRelation id>,
+                           "column": <column on the relation's "to" dataset>}
+                           - pulls a value from a *related* dataset via a
+                           DatasetRelation (this mapping's source dataset must
+                           be that relation's from_dataset), the first place
+                           Relations get used for something other than checks.
+
+    No Python or SQL from the user - the AI-assisted suggest endpoint
+    (app/cleansing/mapping_service.py::suggest_mapping) proposes "column"
+    mappings by name/value similarity, which the user reviews before saving.
+    """
+
+    __tablename__ = "mapping_definitions"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    project_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("projects.id"), index=True)
+
+    name: Mapped[str] = mapped_column(String(255))
+    source_dataset_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("datasets.id"), index=True)
+    fields: Mapped[list] = mapped_column(JSONB, default=list)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class CheckFinding(TenantBase):
     """One finding from running a Check (app/checks/base.py) against a
     Dataset row. Deliberately generic (a `check_key` string, not a table

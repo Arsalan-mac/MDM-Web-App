@@ -9,6 +9,7 @@ from app.api.routers import (
     geisterobjekte,
     health,
     load_data,
+    mappings,
     projects,
     quality,
     register_cleansing,
@@ -49,3 +50,4 @@ app.include_router(delete_records.router)
 app.include_router(report.router)
 app.include_router(datasets.router)
 app.include_router(relations.router)
+app.include_router(mappings.router)

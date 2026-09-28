@@ -4,7 +4,7 @@ import { useAuth } from "@clerk/nextjs";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
-import { ArrowLeft, Database, GitBranch, Table2, Upload } from "lucide-react";
+import { ArrowLeft, Database, GitBranch, Table2, Upload, Wand2 } from "lucide-react";
 import { listDatasets, uploadDataset, type Dataset } from "@/lib/api";
 import { Alert, Button, Card, CardBody, CardDescription, CardHeader, CardTitle, EmptyState, Input, Label } from "@/components/ui";
 
@@ -81,13 +81,22 @@ export default function DatasetsPage() {
             </p>
           </div>
         </div>
-        <Link
-          href={`/dashboard/projects/${projectId}/relations`}
-          className="inline-flex shrink-0 items-center gap-2 rounded-lg border border-ink-300 bg-white px-4 py-2 text-sm font-medium text-ink-800 hover:bg-ink-50"
-        >
-          <GitBranch className="h-4 w-4 text-brand-600" />
-          Relations
-        </Link>
+        <div className="flex shrink-0 items-center gap-2">
+          <Link
+            href={`/dashboard/projects/${projectId}/relations`}
+            className="inline-flex items-center gap-2 rounded-lg border border-ink-300 bg-white px-4 py-2 text-sm font-medium text-ink-800 hover:bg-ink-50"
+          >
+            <GitBranch className="h-4 w-4 text-brand-600" />
+            Relations
+          </Link>
+          <Link
+            href={`/dashboard/projects/${projectId}/mappings`}
+            className="inline-flex items-center gap-2 rounded-lg border border-ink-300 bg-white px-4 py-2 text-sm font-medium text-ink-800 hover:bg-ink-50"
+          >
+            <Wand2 className="h-4 w-4 text-brand-600" />
+            Mapping Studio
+          </Link>
+        </div>
       </div>
 
       <Card>

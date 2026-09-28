@@ -11,7 +11,9 @@ import re
 
 from app.checks.base import CheckDefinition, FindingDraft, register_check
 from app.cleansing.address_checks import check_addresses
+from app.cleansing.fiscal_rules_seed import FISCAL_RULES_SEED
 from app.cleansing.register_checks import register_number_issues
+from app.cleansing.vat_rules import VAT_RULES, clean_norwegian_vat, clean_swiss_vat, clean_tax_number
 
 try:
     from email_validator import EmailNotValidError, validate_email
@@ -303,6 +305,133 @@ def _run_duplicate_detection(rows: list[dict], role_mapping: dict) -> list[Findi
             out.append(FindingDraft(row_index=a, field=match_cols[0], severity="info", message=msg))
 
     return out
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# VAT number format - reuses the exact per-country regex table
+# (app/cleansing/vat_rules.py::VAT_RULES) that Tax Cleansing's VAT phase
+# uses, self-describing off the value's own country prefix when no
+# separate country column is mapped (most VAT numbers start with one).
+# ─────────────────────────────────────────────────────────────────────────
+
+
+def _run_vat_format(rows: list[dict], role_mapping: dict) -> list[FindingDraft]:
+    vat_col = role_mapping["vat_number"]
+    country_col = role_mapping.get("country_code")
+
+    out = []
+    for i, row in enumerate(rows):
+        raw = _clean(row.get(vat_col))
+        if not raw:
+            continue
+        cc = _clean(row.get(country_col)).upper() if country_col else ""
+
+        cleaned = clean_tax_number(raw, country=cc)
+        if cc == "CH":
+            cleaned = clean_swiss_vat(cleaned)
+        elif cc == "NO":
+            cleaned = clean_norwegian_vat(cleaned)
+
+        rule_country = cc if cc in VAT_RULES else (cleaned[:2] if cleaned[:2] in VAT_RULES else None)
+        if rule_country is None:
+            out.append(
+                FindingDraft(
+                    row_index=i, field=vat_col, severity="warning",
+                    message=f"Unrecognized country prefix in {raw!r} - can't validate its format.",
+                )
+            )
+            continue
+
+        pattern = VAT_RULES[rule_country]
+        if not re.match(pattern, cleaned):
+            out.append(
+                FindingDraft(
+                    row_index=i, field=vat_col, severity="warning",
+                    message=f"{raw!r} doesn't match the {rule_country} VAT number format.",
+                )
+            )
+    return out
+
+
+register_check(
+    CheckDefinition(
+        key="vat_format",
+        label="VAT Number Format",
+        description=(
+            "Flags a VAT number that doesn't match its country's format, using the same per-country pattern "
+            "table as Tax Cleansing. Reads the country from the value's own prefix, or from a mapped country "
+            "column if you have one."
+        ),
+        required_roles=["vat_number"],
+        optional_roles=["country_code"],
+    ),
+    _run_vat_format,
+)
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# Fiscal code format - reuses the per-country, per-entity-type rule table
+# (app/cleansing/fiscal_rules_seed.py::FISCAL_RULES_SEED) that Tax
+# Cleansing's Fiscal Code phase uses. Needs a country column since, unlike
+# a VAT number, a fiscal code carries no self-describing country prefix.
+# ─────────────────────────────────────────────────────────────────────────
+
+
+def _run_fiscal_code_format(rows: list[dict], role_mapping: dict) -> list[FindingDraft]:
+    fiscal_col = role_mapping["fiscal_code"]
+    country_col = role_mapping["country_code"]
+    entity_col = role_mapping.get("entity_type")
+
+    out = []
+    for i, row in enumerate(rows):
+        raw = _clean(row.get(fiscal_col))
+        if not raw:
+            continue
+        cc = _clean(row.get(country_col)).upper()
+        country_rules = FISCAL_RULES_SEED.get(cc)
+        if country_rules is None:
+            out.append(
+                FindingDraft(
+                    row_index=i, field=fiscal_col, severity="warning",
+                    message=f"Unrecognized country code {cc!r} - can't validate its fiscal code format.",
+                )
+            )
+            continue
+
+        entity = _clean(row.get(entity_col)).upper() if entity_col else "GENERIC"
+        if entity not in country_rules:
+            entity = "GENERIC"
+        rule = country_rules.get(entity) or country_rules.get("GENERIC")
+        if rule is None:
+            continue
+
+        cleaned = re.sub(r"\s+", "", raw.strip().upper())
+        candidates = [rule["regex"], *rule.get("aliases", [])]
+        if not any(re.match(p, cleaned) for p in candidates):
+            desc = rule.get("desc", "")
+            out.append(
+                FindingDraft(
+                    row_index=i, field=fiscal_col, severity="warning",
+                    message=f"{raw!r} doesn't match the {cc} fiscal code format{f' ({desc})' if desc else ''}.",
+                )
+            )
+    return out
+
+
+register_check(
+    CheckDefinition(
+        key="fiscal_code_format",
+        label="Fiscal Code Format",
+        description=(
+            "Flags a tax/fiscal ID that doesn't match its country's format, using the same per-country, "
+            "per-entity-type rule table as Tax Cleansing. Needs a country column; optionally an entity-type "
+            "column (ORG/IND) for countries with different formats per type."
+        ),
+        required_roles=["fiscal_code", "country_code"],
+        optional_roles=["entity_type"],
+    ),
+    _run_fiscal_code_format,
+)
 
 
 register_check(
