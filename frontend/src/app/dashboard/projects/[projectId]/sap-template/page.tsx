@@ -4,6 +4,7 @@ import { useAuth } from "@clerk/nextjs";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { ArrowLeft, CheckCircle2, Download, ListChecks, Package, Search } from "lucide-react";
 import {
   downloadSapTemplateWorkbook,
   generateAllSapTemplateSheets,
@@ -14,8 +15,7 @@ import {
   type SapTemplateSheetInfo,
   type SapTemplateSheetPreview,
 } from "@/lib/api";
-
-const cell: React.CSSProperties = { border: "1px solid #ccc", padding: "3px 8px", fontSize: "0.8rem" };
+import { Alert, Badge, Button, Card, CardBody, CardHeader, CardTitle, Select, Table, Tbody, Td, Th, Thead, Tr } from "@/components/ui";
 
 export default function SapTemplatePage() {
   const { projectId } = useParams<{ projectId: string }>();
@@ -107,138 +107,171 @@ export default function SapTemplatePage() {
   }
 
   return (
-    <main style={{ padding: "3rem", maxWidth: 1100, margin: "0 auto" }}>
-      <p>
-        <Link href={`/dashboard/projects/${projectId}`}>← Back to project</Link>
-      </p>
-      <h1>📦 SAP Template Migration</h1>
-      <p style={{ color: "#666" }}>
-        Generates SAP Business Partner master-data migration rows from Mandanten: BUT000-General
-        (partner master data) and ADRC-Address. Ported as the first slice of this stage - the
-        materialized-table sheets (BUT100/BUT0ID/BUT0IS/BUT000-Append), DFKKBPTAXNUM, country
-        filtering, CSV export, and anonymization are deferred - see docs/ROADMAP.md.
-      </p>
+    <div className="space-y-6">
+      <Link
+        href={`/dashboard/projects/${projectId}`}
+        className="inline-flex items-center gap-1.5 text-sm font-medium text-ink-500 hover:text-ink-800"
+      >
+        <ArrowLeft className="h-3.5 w-3.5" />
+        Back to project
+      </Link>
 
-      {error && <p style={{ color: "crimson" }}>{error}</p>}
-      {message && <p style={{ color: "green" }}>{message}</p>}
-
-      <h3>Preview (5 rows)</h3>
-      <div style={{ display: "flex", gap: "1rem", alignItems: "center", marginBottom: "1rem" }}>
-        <select value={selectedSheet} onChange={(e) => setSelectedSheet(e.target.value)}>
-          {sheets.map((s) => (
-            <option key={s.name} value={s.name}>
-              {s.name} ({s.field_count} fields)
-            </option>
-          ))}
-        </select>
-        <button onClick={handlePreview} disabled={busy || !selectedSheet}>
-          🔍 Preview
-        </button>
+      <div>
+        <h1 className="flex items-center gap-2 text-2xl font-semibold text-ink-900">
+          <Package className="h-6 w-6 text-brand-600" />
+          SAP Template Migration
+        </h1>
+        <p className="mt-1 text-sm text-ink-500">
+          Generates SAP Business Partner master-data migration rows from Mandanten: BUT000-General
+          (partner master data) and ADRC-Address. Ported as the first slice of this stage - the
+          materialized-table sheets (BUT100/BUT0ID/BUT0IS/BUT000-Append), DFKKBPTAXNUM, country
+          filtering, CSV export, and anonymization are deferred - see docs/ROADMAP.md.
+        </p>
       </div>
 
-      {preview && (
-        <>
-          <p style={{ color: "#666" }}>
-            {preview.total} total row(s) in this sheet · {preview.violations.length} violation(s) among the
-            previewed rows
-          </p>
-          {preview.rows.length > 0 && (
-            <div style={{ overflowX: "auto", marginBottom: "1rem" }}>
-              <table style={{ borderCollapse: "collapse" }}>
-                <thead>
-                  <tr>
-                    {Object.keys(preview.rows[0]).map((h) => (
-                      <th key={h} style={cell}>
-                        {h}
-                      </th>
+      {error && <Alert tone="danger">{error}</Alert>}
+      {message && <Alert tone="success">{message}</Alert>}
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Preview (5 rows)</CardTitle>
+        </CardHeader>
+        <CardBody className="space-y-4">
+          <div className="flex flex-wrap items-center gap-3">
+            <Select
+              value={selectedSheet}
+              onChange={(e) => setSelectedSheet(e.target.value)}
+              className="max-w-xs"
+            >
+              {sheets.map((s) => (
+                <option key={s.name} value={s.name}>
+                  {s.name} ({s.field_count} fields)
+                </option>
+              ))}
+            </Select>
+            <Button variant="secondary" onClick={handlePreview} disabled={busy || !selectedSheet}>
+              <Search className="h-4 w-4" />
+              Preview
+            </Button>
+          </div>
+
+          {preview && (
+            <div className="space-y-4">
+              <p className="text-sm text-ink-500">
+                {preview.total} total row(s) in this sheet · {preview.violations.length} violation(s) among the
+                previewed rows
+              </p>
+
+              {preview.rows.length > 0 && (
+                <Table>
+                  <Thead>
+                    <Tr>
+                      {Object.keys(preview.rows[0]).map((h) => (
+                        <Th key={h}>{h}</Th>
+                      ))}
+                    </Tr>
+                  </Thead>
+                  <Tbody>
+                    {preview.rows.map((row, i) => (
+                      <Tr key={i}>
+                        {Object.entries(row).map(([field, value]) => {
+                          const violated = preview.violations.some((v) => v.row_index === i && v.field === field);
+                          return (
+                            <Td
+                              key={field}
+                              className={violated ? "bg-red-50 text-red-800 font-medium" : undefined}
+                            >
+                              {value}
+                            </Td>
+                          );
+                        })}
+                      </Tr>
                     ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {preview.rows.map((row, i) => (
-                    <tr key={i}>
-                      {Object.entries(row).map(([field, value]) => {
-                        const violated = preview.violations.some((v) => v.row_index === i && v.field === field);
-                        return (
-                          <td key={field} style={{ ...cell, background: violated ? "#ffc7ce" : undefined }}>
-                            {value}
-                          </td>
-                        );
-                      })}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </Tbody>
+                </Table>
+              )}
+
+              {preview.violations.length > 0 && (
+                <div className="space-y-2">
+                  <h4 className="text-sm font-semibold text-ink-900">Violations</h4>
+                  <Table>
+                    <Thead>
+                      <Tr>
+                        <Th>IDParty</Th>
+                        <Th>Field</Th>
+                        <Th>Value</Th>
+                        <Th>Allowed length</Th>
+                      </Tr>
+                    </Thead>
+                    <Tbody>
+                      {preview.violations.map((v, i) => (
+                        <Tr key={i}>
+                          <Td>{v.id_party}</Td>
+                          <Td>{v.field}</Td>
+                          <Td className="bg-red-50 text-red-800 font-medium">{v.value}</Td>
+                          <Td>{v.allowed_length}</Td>
+                        </Tr>
+                      ))}
+                    </Tbody>
+                  </Table>
+                </div>
+              )}
             </div>
           )}
-          {preview.violations.length > 0 && (
-            <>
-              <h4>Violations</h4>
-              <table style={{ borderCollapse: "collapse", fontSize: "0.8rem" }}>
-                <thead>
-                  <tr>
-                    {["IDParty", "Field", "Value", "Allowed length"].map((h) => (
-                      <th key={h} style={cell}>
-                        {h}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {preview.violations.map((v, i) => (
-                    <tr key={i}>
-                      <td style={cell}>{v.id_party}</td>
-                      <td style={cell}>{v.field}</td>
-                      <td style={cell}>{v.value}</td>
-                      <td style={cell}>{v.allowed_length}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </>
+        </CardBody>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Generate</CardTitle>
+        </CardHeader>
+        <CardBody className="space-y-4">
+          <div className="flex flex-wrap gap-3">
+            <Button variant="secondary" onClick={handleCheckAll} disabled={busy}>
+              <ListChecks className="h-4 w-4" />
+              Check all sheets
+            </Button>
+            <Button onClick={handleDownload} disabled={downloading}>
+              <Download className="h-4 w-4" />
+              {downloading ? "Generating…" : "Generate & download workbook"}
+            </Button>
+          </div>
+
+          {summary && (
+            <Table>
+              <Thead>
+                <Tr>
+                  <Th>Sheet</Th>
+                  <Th>Rows</Th>
+                  <Th>Violations</Th>
+                </Tr>
+              </Thead>
+              <Tbody>
+                {Object.entries(summary.sheets).map(([name, s]) => (
+                  <Tr key={name}>
+                    <Td>{name}</Td>
+                    <Td>{s.total}</Td>
+                    <Td>
+                      {s.violation_count > 0 ? (
+                        <Badge tone="danger">{s.violation_count}</Badge>
+                      ) : (
+                        <Badge tone="success">0</Badge>
+                      )}
+                    </Td>
+                  </Tr>
+                ))}
+              </Tbody>
+            </Table>
           )}
-        </>
-      )}
+        </CardBody>
+      </Card>
 
-      <hr style={{ margin: "2rem 0" }} />
-
-      <h3>Generate</h3>
-      <div style={{ display: "flex", gap: "1rem", marginBottom: "1rem" }}>
-        <button onClick={handleCheckAll} disabled={busy}>
-          📊 Check all sheets
-        </button>
-        <button onClick={handleDownload} disabled={downloading}>
-          {downloading ? "Generating…" : "🚀 Generate & download workbook"}
-        </button>
+      <div>
+        <Button onClick={handleMarkDone} disabled={busy}>
+          <CheckCircle2 className="h-4 w-4" />
+          Mark this stage as done
+        </Button>
       </div>
-
-      {summary && (
-        <table style={{ borderCollapse: "collapse", fontSize: "0.85rem" }}>
-          <thead>
-            <tr>
-              {["Sheet", "Rows", "Violations"].map((h) => (
-                <th key={h} style={cell}>
-                  {h}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {Object.entries(summary.sheets).map(([name, s]) => (
-              <tr key={name}>
-                <td style={cell}>{name}</td>
-                <td style={cell}>{s.total}</td>
-                <td style={cell}>{s.violation_count}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
-
-      <hr style={{ margin: "2.5rem 0" }} />
-      <button onClick={handleMarkDone} disabled={busy}>
-        Mark this stage as done
-      </button>
-    </main>
+    </div>
   );
 }

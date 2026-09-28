@@ -4,6 +4,7 @@ import { useAuth } from "@clerk/nextjs";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { AlertTriangle, ArrowLeft, CheckCircle2, ListFilter, Trash2 } from "lucide-react";
 import {
   clearAllRows,
   clearRowsByIds,
@@ -11,6 +12,7 @@ import {
   setStageStatus,
   type DeleteRecordsTableInfo,
 } from "@/lib/api";
+import { Alert, Button, Card, CardBody, CardHeader, CardTitle, Input, Label, Select } from "@/components/ui";
 
 type Mode = "all" | "ids";
 
@@ -115,134 +117,194 @@ export default function DeleteRecordsPage() {
   const canExecuteIds = columns.length > 0 && confirmed && file !== null && excelIdCol.trim() !== "" && dbIdCol !== "";
 
   return (
-    <main style={{ padding: "3rem", maxWidth: 900, margin: "0 auto" }}>
-      <p>
-        <Link href={`/dashboard/projects/${projectId}`}>← Back to project</Link>
-      </p>
-      <h1>🗑️ Delete Records</h1>
-      <p style={{ color: "#666" }}>
-        Nullify specific column values either across all rows or only for rows matching an
-        uploaded ID list. Rows are never physically removed - only the selected field values are
-        cleared.
-      </p>
+    <div className="space-y-6">
+      <Link
+        href={`/dashboard/projects/${projectId}`}
+        className="inline-flex items-center gap-1.5 text-sm font-medium text-ink-500 hover:text-ink-800"
+      >
+        <ArrowLeft className="h-3.5 w-3.5" />
+        Back to project
+      </Link>
 
-      {error && <p style={{ color: "crimson" }}>{error}</p>}
-      {message && <p style={{ color: "green" }}>{message}</p>}
+      <div>
+        <h1 className="flex items-center gap-2 text-2xl font-semibold text-ink-900">
+          <Trash2 className="h-6 w-6 text-brand-600" />
+          Delete Records
+        </h1>
+        <p className="mt-1 text-sm text-ink-500">
+          Nullify specific column values either across all rows or only for rows matching an
+          uploaded ID list. Rows are never physically removed - only the selected field values are
+          cleared.
+        </p>
+      </div>
 
-      <h3>Step 1 — Select Table</h3>
-      <select value={table} onChange={(e) => setTable(e.target.value)}>
-        {tables.map((t) => (
-          <option key={t.table} value={t.table}>
-            {t.table}
-          </option>
-        ))}
-      </select>
+      {error && <Alert tone="danger">{error}</Alert>}
+      {message && <Alert tone="success">{message}</Alert>}
 
-      <h3>Step 2 — Select Columns to Clear</h3>
-      {current && (
-        <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem 1.5rem", maxWidth: 700 }}>
-          {current.clearable_columns.map((c) => (
-            <label key={c} style={{ fontSize: "0.9rem" }}>
-              <input type="checkbox" checked={columns.includes(c)} onChange={() => toggleColumn(c)} /> {c}
-            </label>
-          ))}
-        </div>
-      )}
-      {columns.length === 0 && <p style={{ color: "#666" }}>Select at least one column to continue.</p>}
+      <Card>
+        <CardHeader>
+          <CardTitle>Step 1 — Select Table</CardTitle>
+        </CardHeader>
+        <CardBody>
+          <Select value={table} onChange={(e) => setTable(e.target.value)} className="max-w-xs">
+            {tables.map((t) => (
+              <option key={t.table} value={t.table}>
+                {t.table}
+              </option>
+            ))}
+          </Select>
+        </CardBody>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Step 2 — Select Columns to Clear</CardTitle>
+        </CardHeader>
+        <CardBody>
+          {current && (
+            <div className="flex flex-wrap gap-x-6 gap-y-2">
+              {current.clearable_columns.map((c) => (
+                <label key={c} className="flex items-center gap-2 text-sm text-ink-700">
+                  <input
+                    type="checkbox"
+                    checked={columns.includes(c)}
+                    onChange={() => toggleColumn(c)}
+                    className="h-4 w-4 rounded border-ink-300 text-brand-600 focus:ring-brand-500/40"
+                  />
+                  {c}
+                </label>
+              ))}
+            </div>
+          )}
+          {columns.length === 0 && <p className="mt-2 text-sm text-ink-500">Select at least one column to continue.</p>}
+        </CardBody>
+      </Card>
 
       {columns.length > 0 && (
-        <>
-          <h3>Step 3 — Choose Deletion Mode</h3>
-          <div style={{ display: "flex", gap: "1.5rem", marginBottom: "1rem" }}>
-            <label>
-              <input
-                type="radio"
-                checked={mode === "all"}
-                onChange={() => {
-                  setMode("all");
-                  setConfirmed(false);
-                }}
-              />{" "}
-              🧹 Clear for ALL rows
-            </label>
-            <label>
-              <input
-                type="radio"
-                checked={mode === "ids"}
-                onChange={() => {
-                  setMode("ids");
-                  setConfirmed(false);
-                }}
-              />{" "}
-              📋 Clear for specific rows (uploaded ID list)
-            </label>
-          </div>
-
-          {mode === "all" && (
-            <>
-              <p style={{ background: "#fff3cd", padding: "0.75rem", borderRadius: 4 }}>
-                ⚠️ This will set <b>{columns.join(", ")}</b> to NULL for <b>every row</b> in <b>{table}</b>.
-              </p>
-              <label style={{ display: "block", margin: "0.5rem 0" }}>
-                <input type="checkbox" checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} /> I
-                understand this will clear the selected columns for all rows.
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <ListFilter className="h-4 w-4 text-ink-400" />
+              Step 3 — Choose Deletion Mode
+            </CardTitle>
+          </CardHeader>
+          <CardBody className="space-y-4">
+            <div className="flex flex-wrap gap-6">
+              <label className="flex items-center gap-2 text-sm text-ink-700">
+                <input
+                  type="radio"
+                  checked={mode === "all"}
+                  onChange={() => {
+                    setMode("all");
+                    setConfirmed(false);
+                  }}
+                  className="h-4 w-4 border-ink-300 text-brand-600 focus:ring-brand-500/40"
+                />
+                Clear for ALL rows
               </label>
-              <button onClick={handleClearAll} disabled={!canExecuteAll || busy}>
-                🗑️ Execute Clear (All Rows)
-              </button>
-            </>
-          )}
+              <label className="flex items-center gap-2 text-sm text-ink-700">
+                <input
+                  type="radio"
+                  checked={mode === "ids"}
+                  onChange={() => {
+                    setMode("ids");
+                    setConfirmed(false);
+                  }}
+                  className="h-4 w-4 border-ink-300 text-brand-600 focus:ring-brand-500/40"
+                />
+                Clear for specific rows (uploaded ID list)
+              </label>
+            </div>
 
-          {mode === "ids" && current && (
-            <>
-              <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem", maxWidth: 500 }}>
-                <label>
-                  Upload ID list (.csv / .txt / .xlsx)
-                  <br />
-                  <input type="file" accept=".csv,.txt,.xlsx,.xls" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
-                </label>
-                <label>
-                  Column name in the uploaded file containing the IDs
-                  <br />
+            {mode === "all" && (
+              <div className="space-y-3">
+                <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-sm text-amber-800">
+                  <AlertTriangle className="h-4 w-4 shrink-0" />
+                  <p>
+                    This will set <b>{columns.join(", ")}</b> to NULL for <b>every row</b> in <b>{table}</b>.
+                  </p>
+                </div>
+                <label className="flex items-center gap-2 text-sm text-ink-700">
                   <input
-                    value={excelIdCol}
-                    onChange={(e) => setExcelIdCol(e.target.value)}
-                    placeholder="e.g. IDParty"
-                    style={{ width: "12rem" }}
+                    type="checkbox"
+                    checked={confirmed}
+                    onChange={(e) => setConfirmed(e.target.checked)}
+                    className="h-4 w-4 rounded border-ink-300 text-brand-600 focus:ring-brand-500/40"
                   />
+                  I understand this will clear the selected columns for all rows.
                 </label>
-                <label>
-                  Matching column in {table}
-                  <br />
-                  <select value={dbIdCol} onChange={(e) => setDbIdCol(e.target.value)}>
-                    {current.columns.map((c) => (
-                      <option key={c} value={c}>
-                        {c}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                <Button variant="danger" onClick={handleClearAll} disabled={!canExecuteAll || busy}>
+                  <Trash2 className="h-4 w-4" />
+                  Execute Clear (All Rows)
+                </Button>
               </div>
-              <p style={{ background: "#fff3cd", padding: "0.75rem", borderRadius: 4, marginTop: "1rem" }}>
-                ⚠️ This will set <b>{columns.join(", ")}</b> to NULL for rows in <b>{table}</b> where{" "}
-                <b>{dbIdCol}</b> matches an ID from the uploaded file.
-              </p>
-              <label style={{ display: "block", margin: "0.5rem 0" }}>
-                <input type="checkbox" checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} /> I
-                understand this will clear the selected columns for the matched rows.
-              </label>
-              <button onClick={handleClearByIds} disabled={!canExecuteIds || busy}>
-                🗑️ Execute Clear (ID List)
-              </button>
-            </>
-          )}
-        </>
+            )}
+
+            {mode === "ids" && current && (
+              <div className="space-y-4">
+                <div className="flex max-w-md flex-col gap-4">
+                  <div>
+                    <Label>Upload ID list (.csv / .txt / .xlsx)</Label>
+                    <input
+                      type="file"
+                      accept=".csv,.txt,.xlsx,.xls"
+                      onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+                      className="block w-full text-sm text-ink-600 file:mr-3 file:rounded-lg file:border-0 file:bg-ink-100 file:px-3 file:py-2 file:text-sm file:font-medium file:text-ink-700 hover:file:bg-ink-200"
+                    />
+                  </div>
+                  <div>
+                    <Label>Column name in the uploaded file containing the IDs</Label>
+                    <Input
+                      value={excelIdCol}
+                      onChange={(e) => setExcelIdCol(e.target.value)}
+                      placeholder="e.g. IDParty"
+                      className="max-w-[12rem]"
+                    />
+                  </div>
+                  <div>
+                    <Label>Matching column in {table}</Label>
+                    <Select value={dbIdCol} onChange={(e) => setDbIdCol(e.target.value)} className="max-w-xs">
+                      {current.columns.map((c) => (
+                        <option key={c} value={c}>
+                          {c}
+                        </option>
+                      ))}
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-sm text-amber-800">
+                  <AlertTriangle className="h-4 w-4 shrink-0" />
+                  <p>
+                    This will set <b>{columns.join(", ")}</b> to NULL for rows in <b>{table}</b> where{" "}
+                    <b>{dbIdCol}</b> matches an ID from the uploaded file.
+                  </p>
+                </div>
+                <label className="flex items-center gap-2 text-sm text-ink-700">
+                  <input
+                    type="checkbox"
+                    checked={confirmed}
+                    onChange={(e) => setConfirmed(e.target.checked)}
+                    className="h-4 w-4 rounded border-ink-300 text-brand-600 focus:ring-brand-500/40"
+                  />
+                  I understand this will clear the selected columns for the matched rows.
+                </label>
+                <Button variant="danger" onClick={handleClearByIds} disabled={!canExecuteIds || busy}>
+                  <Trash2 className="h-4 w-4" />
+                  Execute Clear (ID List)
+                </Button>
+              </div>
+            )}
+          </CardBody>
+        </Card>
       )}
 
-      <hr style={{ margin: "2.5rem 0" }} />
-      <button onClick={handleMarkDone} disabled={busy}>
-        Mark this stage as done
-      </button>
-    </main>
+      <div>
+        <Button onClick={handleMarkDone} disabled={busy}>
+          <CheckCircle2 className="h-4 w-4" />
+          Mark this stage as done
+        </Button>
+      </div>
+    </div>
   );
 }

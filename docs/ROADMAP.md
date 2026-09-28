@@ -600,6 +600,51 @@ Template Migration, RegisterNumber Cleansing, Delete Records.
   table, `project_id`, or a primary-key column were all correctly rejected
   with a 400 before any query ran.
 
+- 1e. UI redesign + first sellability features. The frontend was fully
+  unstyled through Phase 1 (default browser form controls, no layout) -
+  every page has now been reskinned onto a real design system: Tailwind
+  CSS v4, a small component library (`src/components/ui/`: Button, Card,
+  Table, Badge, Tabs, Alert, ...), a persistent `AppShell` (dark sidebar,
+  org switcher, nav) wrapping every `/dashboard` route via
+  `src/app/dashboard/layout.tsx`, and a `PipelineStepper` grid replacing
+  the old plain-text stage list. All 11 pipeline-stage pages, the
+  dashboard, project detail, and the public landing page were reskinned
+  without touching their business logic (verified via `tsc --noEmit` and
+  `next build` both clean, plus live-browser screenshots of every page).
+  Three new pages/features came out of the same pass:
+  - **Team** (`/dashboard/team`): org member invites/roles via Clerk's
+    `OrganizationProfile` component directly - no new backend needed,
+    Clerk already owns organization membership.
+  - **Settings** (`/dashboard/settings`): rename/delete a project. Delete
+    is a real hard delete (`project_service.delete_project`), not a soft
+    flag - it walks every table with a `project_id` column (via
+    `TenantBase.metadata`, the same introspection pattern Delete Records
+    uses) and removes that project's rows before removing the `Project`/
+    `Stage` rows themselves, since none of the FKs have `ON DELETE
+    CASCADE`. Verified live: create a throwaway project via the API,
+    delete it from Settings, confirm it's gone and the DELETE returned
+    204.
+  - **Report** (`/dashboard/projects/{id}/report`): the `report` stage
+    key already existed in `PIPELINE_STAGES` as a placeholder; it now has
+    a real page. `report_service.get_summary` counts Mandanten/Auftraege/
+    quarantined-ghost rows plus each stage's *open* findings (JunkAddress,
+    AddressDecompositionResult, RegisterCleansingResult row counts - these
+    tables only ever hold pending proposals, since every accept flow
+    deletes a proposal's row once applied, so "row count" and "open
+    finding count" are the same number). Also added a Mandanten CSV
+    export (`report_service.export_mandanten_csv`, typed columns then
+    every key ever seen in a row's `extra` JSONB, sorted for a stable
+    header) alongside a link to the existing SAP Template Excel download.
+    **Bug fixed during testing**: the CSV export first crashed with
+    `AttributeError: 'Mandant' object has no attribute 'Name 1'` - the
+    exact same DB-column-name-vs-Python-attribute-key mismatch already
+    fixed once in SAP-CARP's overwrite service (`Name 1`/`Name 2`/... were
+    declared with an explicit DB column name that differs from their
+    Python attribute). Fixed by reading `Mandant.__mapper__.column_attrs`
+    (attribute key + DB name) instead of `__mapper__.columns` (DB name
+    only), with a regression test (`tests/test_report.py`) asserting the
+    mapping and a real `getattr` round-trip on every typed column.
+
 ## Phase 3 — Productionization
 
 Azure deployment (Container Apps, Azure DB for PostgreSQL, Azure Cache for

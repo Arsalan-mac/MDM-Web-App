@@ -4,7 +4,9 @@ import { useAuth } from "@clerk/nextjs";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useState } from "react";
+import { ArrowLeft, Database, Upload } from "lucide-react";
 import { uploadMandanten, uploadReferenceTable, type LoadSummary, type ReferenceTable } from "@/lib/api";
+import { Alert, Button, Card, CardBody, CardDescription, CardHeader, CardTitle, Table, Tbody, Td, Th, Thead, Tr } from "@/components/ui";
 
 function ReferenceTableUpload({
   projectId,
@@ -40,26 +42,31 @@ function ReferenceTableUpload({
   }
 
   return (
-    <div style={{ margin: "1.5rem 0", padding: "1rem", border: "1px solid #ddd", borderRadius: 6 }}>
-      <h3 style={{ marginTop: 0 }}>{label}</h3>
-      <p style={{ color: "#666", fontSize: "0.9rem" }}>{description}</p>
-      <form onSubmit={handleUpload}>
-        <input
-          type="file"
-          accept=".csv,.txt,.xlsx"
-          onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-        />
-        <button type="submit" disabled={!file || uploading} style={{ marginLeft: "1rem" }}>
-          {uploading ? "Uploading…" : "Start Initial Load"}
-        </button>
-      </form>
-      {error && <p style={{ color: "crimson" }}>{error}</p>}
-      {summary && (
-        <p style={{ color: "green" }}>
-          ✅ Loaded {summary.row_count} rows, {summary.columns.length} columns.
-        </p>
-      )}
-    </div>
+    <Card>
+      <CardHeader>
+        <CardTitle>{label}</CardTitle>
+        <CardDescription>{description}</CardDescription>
+      </CardHeader>
+      <CardBody className="space-y-3">
+        <form onSubmit={handleUpload} className="flex flex-wrap items-center gap-3">
+          <input
+            type="file"
+            accept=".csv,.txt,.xlsx"
+            onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+            className="text-sm text-ink-600 file:mr-3 file:rounded-lg file:border file:border-ink-300 file:bg-white file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-ink-700 hover:file:bg-ink-50"
+          />
+          <Button type="submit" size="sm" disabled={!file || uploading}>
+            {uploading ? "Uploading…" : "Start Initial Load"}
+          </Button>
+        </form>
+        {error && <Alert tone="danger">{error}</Alert>}
+        {summary && (
+          <Alert tone="success">
+            Loaded {summary.row_count} rows, {summary.columns.length} columns.
+          </Alert>
+        )}
+      </CardBody>
+    </Card>
   );
 }
 
@@ -88,89 +95,104 @@ export default function LoadDataPage() {
   }
 
   return (
-    <main style={{ padding: "3rem", maxWidth: 800, margin: "0 auto" }}>
-      <p>
-        <Link href={`/dashboard/projects/${projectId}`}>← Back to project</Link>
-      </p>
-      <h1>Load Data — Mandanten (Initial Load)</h1>
-      <p>
-        Upload the client master-data file (.csv, .txt or .xlsx). This replaces the
-        project&apos;s Mandanten table entirely — the same &quot;Initial Load&quot; behavior as
-        the original tool. Delta upload isn&apos;t ported yet.
-      </p>
+    <div className="space-y-6">
+      <Link
+        href={`/dashboard/projects/${projectId}`}
+        className="inline-flex items-center gap-1.5 text-sm font-medium text-ink-500 hover:text-ink-800"
+      >
+        <ArrowLeft className="h-3.5 w-3.5" />
+        Back to project
+      </Link>
 
-      <form onSubmit={handleUpload} style={{ margin: "1.5rem 0" }}>
-        <input
-          type="file"
-          accept=".csv,.txt,.xlsx"
-          onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-        />
-        <button type="submit" disabled={!file || uploading} style={{ marginLeft: "1rem" }}>
-          {uploading ? "Uploading…" : "Start Initial Load"}
-        </button>
-      </form>
+      <div>
+        <h1 className="text-2xl font-semibold text-ink-900">Load Data — Mandanten (Initial Load)</h1>
+        <p className="mt-1 text-sm text-ink-500">
+          Upload the client master-data file (.csv, .txt or .xlsx). This replaces the project&apos;s
+          Mandanten table entirely — the same &quot;Initial Load&quot; behavior as the original tool.
+          Delta upload isn&apos;t ported yet.
+        </p>
+      </div>
 
-      {error && <p style={{ color: "crimson" }}>{error}</p>}
+      <Card>
+        <CardBody className="space-y-4">
+          <form onSubmit={handleUpload} className="flex flex-wrap items-center gap-3">
+            <input
+              type="file"
+              accept=".csv,.txt,.xlsx"
+              onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+              className="text-sm text-ink-600 file:mr-3 file:rounded-lg file:border file:border-ink-300 file:bg-white file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-ink-700 hover:file:bg-ink-50"
+            />
+            <Button type="submit" disabled={!file || uploading}>
+              <Upload className="h-4 w-4" />
+              {uploading ? "Uploading…" : "Start Initial Load"}
+            </Button>
+          </form>
 
-      {summary && (
-        <>
-          <p style={{ color: "green" }}>
-            ✅ Loaded {summary.row_count} rows, {summary.columns.length} columns. The Load Data
-            stage is now marked done.
-          </p>
-          <h3>Preview (first 5 rows)</h3>
-          <div style={{ overflowX: "auto" }}>
-            <table style={{ borderCollapse: "collapse", width: "100%", fontSize: "0.85rem" }}>
-              <thead>
-                <tr>
-                  {summary.columns.map((col) => (
-                    <th key={col} style={{ border: "1px solid #ccc", padding: "4px 8px", textAlign: "left" }}>
-                      {col}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {summary.preview.map((row, i) => (
-                  <tr key={i}>
-                    {summary.columns.map((col) => (
-                      <td key={col} style={{ border: "1px solid #ccc", padding: "4px 8px" }}>
-                        {row[col] ?? ""}
-                      </td>
+          {error && <Alert tone="danger">{error}</Alert>}
+
+          {summary && (
+            <>
+              <Alert tone="success">
+                Loaded {summary.row_count} rows, {summary.columns.length} columns. The Load Data
+                stage is now marked done.
+              </Alert>
+              <div>
+                <p className="mb-2 text-sm font-semibold text-ink-800">Preview (first 5 rows)</p>
+                <Table>
+                  <Thead>
+                    <Tr>
+                      {summary.columns.map((col) => (
+                        <Th key={col}>{col}</Th>
+                      ))}
+                    </Tr>
+                  </Thead>
+                  <Tbody>
+                    {summary.preview.map((row, i) => (
+                      <Tr key={i}>
+                        {summary.columns.map((col) => (
+                          <Td key={col}>{row[col] ?? ""}</Td>
+                        ))}
+                      </Tr>
                     ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </>
-      )}
+                  </Tbody>
+                </Table>
+              </div>
+            </>
+          )}
+        </CardBody>
+      </Card>
 
-      <hr style={{ margin: "2.5rem 0" }} />
-      <h2>Reference tables</h2>
-      <p style={{ color: "#666" }}>
-        Needed by the Geisterobjekte stage to detect client records with no connection to any
-        order, related party, or opponent.
-      </p>
+      <div className="space-y-3">
+        <div className="flex items-center gap-2">
+          <Database className="h-4 w-4 text-ink-400" />
+          <h2 className="text-lg font-semibold text-ink-900">Reference tables</h2>
+        </div>
+        <p className="text-sm text-ink-500">
+          Needed by the Geisterobjekte stage to detect client records with no connection to any
+          order, related party, or opponent.
+        </p>
 
-      <ReferenceTableUpload
-        projectId={projectId}
-        table="auftraege"
-        label="Auftraege (client engagements)"
-        description="Columns: IDProject, IDParty, ProjectNumber, Year, AssessmentYear."
-      />
-      <ReferenceTableUpload
-        projectId={projectId}
-        table="verbundene-parteien"
-        label="VERBUNDENE_PARTEIEN (connected parties)"
-        description="Columns: IDParty, IDParty_Related."
-      />
-      <ReferenceTableUpload
-        projectId={projectId}
-        table="mandant-gegner"
-        label="MANDANT_GEGNER (opponent relationships)"
-        description='Columns: "Client - IDParty", "Opponent - IDParty".'
-      />
-    </main>
+        <div className="space-y-4">
+          <ReferenceTableUpload
+            projectId={projectId}
+            table="auftraege"
+            label="Auftraege (client engagements)"
+            description="Columns: IDProject, IDParty, ProjectNumber, Year, AssessmentYear."
+          />
+          <ReferenceTableUpload
+            projectId={projectId}
+            table="verbundene-parteien"
+            label="VERBUNDENE_PARTEIEN (connected parties)"
+            description="Columns: IDParty, IDParty_Related."
+          />
+          <ReferenceTableUpload
+            projectId={projectId}
+            table="mandant-gegner"
+            label="MANDANT_GEGNER (opponent relationships)"
+            description='Columns: "Client - IDParty", "Opponent - IDParty".'
+          />
+        </div>
+      </div>
+    </div>
   );
 }

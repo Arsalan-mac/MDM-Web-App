@@ -3,7 +3,9 @@
 import { useAuth, useOrganization, useUser } from "@clerk/nextjs";
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { FolderKanban, Plus } from "lucide-react";
 import { createProject, fetchProjects, provisionTenant, sanitizeTenantSlug, type Project } from "@/lib/api";
+import { Button, Card, CardBody, EmptyState, Input, ProgressBar, Alert } from "@/components/ui";
 
 export default function DashboardPage() {
   const { getToken, orgId, isLoaded } = useAuth();
@@ -63,43 +65,88 @@ export default function DashboardPage() {
 
   if (!orgId) {
     return (
-      <main style={{ padding: "3rem", maxWidth: 640, margin: "0 auto" }}>
-        <h1>Dashboard</h1>
-        <p>Select or create an organization to continue.</p>
-      </main>
+      <Card>
+        <CardBody>
+          <EmptyState
+            icon={<FolderKanban className="h-8 w-8" />}
+            title="Select or create an organization"
+            description="Use the switcher in the sidebar to pick a workspace, or create a new one to get started."
+          />
+        </CardBody>
+      </Card>
     );
   }
 
   return (
-    <main style={{ padding: "3rem", maxWidth: 640, margin: "0 auto" }}>
-      <h1>Projects</h1>
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold text-ink-900">Projects</h1>
+          <p className="mt-1 text-sm text-ink-500">Your data-migration projects for this workspace.</p>
+        </div>
+      </div>
 
-      {error && <p style={{ color: "crimson" }}>{error}</p>}
+      <Card>
+        <CardBody>
+          <form onSubmit={handleCreate} className="flex gap-2">
+            <Input
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+              placeholder="New migration project name"
+            />
+            <Button type="submit" disabled={creating || !newName.trim()} className="whitespace-nowrap">
+              <Plus className="h-4 w-4" />
+              {creating ? "Creating…" : "Create project"}
+            </Button>
+          </form>
+        </CardBody>
+      </Card>
 
-      <form onSubmit={handleCreate} style={{ display: "flex", gap: "0.5rem", margin: "1rem 0" }}>
-        <input
-          value={newName}
-          onChange={(e) => setNewName(e.target.value)}
-          placeholder="New migration project name"
-          style={{ flex: 1, padding: "0.4rem" }}
-        />
-        <button type="submit" disabled={creating || !newName.trim()}>
-          {creating ? "Creating…" : "Create project"}
-        </button>
-      </form>
+      {error && <Alert tone="danger">{error}</Alert>}
 
-      {!error && projects.length === 0 && <p>No projects yet.</p>}
-      <ul>
-        {projects.map((project) => {
-          const done = project.stages.filter((s) => s.status === "done").length;
-          return (
-            <li key={project.id}>
-              <Link href={`/dashboard/projects/${project.id}`}>{project.name}</Link> — {done}/
-              {project.stages.length} stages done
-            </li>
-          );
-        })}
-      </ul>
-    </main>
+      {!error && projects.length === 0 && (
+        <Card>
+          <CardBody>
+            <EmptyState
+              icon={<FolderKanban className="h-8 w-8" />}
+              title="No projects yet"
+              description="Create your first migration project above to start loading and cleansing data."
+            />
+          </CardBody>
+        </Card>
+      )}
+
+      {projects.length > 0 && (
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {projects.map((project) => {
+            const done = project.stages.filter((s) => s.status === "done").length;
+            const pct = (done / project.stages.length) * 100;
+            return (
+              <Link key={project.id} href={`/dashboard/projects/${project.id}`}>
+                <Card className="h-full transition-all hover:border-brand-300 hover:shadow-md hover:shadow-ink-900/5">
+                  <CardBody className="flex h-full flex-col gap-4">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand-100 text-brand-700">
+                        <FolderKanban className="h-4.5 w-4.5" />
+                      </div>
+                      <p className="font-semibold text-ink-900">{project.name}</p>
+                    </div>
+                    <div className="mt-auto space-y-1.5">
+                      <div className="flex items-center justify-between text-xs text-ink-500">
+                        <span>
+                          {done}/{project.stages.length} stages done
+                        </span>
+                        <span>{Math.round(pct)}%</span>
+                      </div>
+                      <ProgressBar value={pct} />
+                    </div>
+                  </CardBody>
+                </Card>
+              </Link>
+            );
+          })}
+        </div>
+      )}
+    </div>
   );
 }

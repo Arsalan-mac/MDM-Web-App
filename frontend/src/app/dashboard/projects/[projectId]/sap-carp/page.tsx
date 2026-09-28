@@ -5,6 +5,15 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
+  ArrowLeft,
+  AlertTriangle,
+  CheckCircle2,
+  Info,
+  PlayCircle,
+  Upload,
+  XCircle,
+} from "lucide-react";
+import {
   applyNameSplit,
   clearRedundantCompanyNames,
   getNameDistributionStatus,
@@ -21,6 +30,24 @@ import {
   type NameSplitStatus,
   type OverwriteStatus,
 } from "@/lib/api";
+import {
+  Alert,
+  Button,
+  Card,
+  CardBody,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+  Input,
+  Label,
+  Table,
+  Tabs,
+  Tbody,
+  Td,
+  Th,
+  Thead,
+  Tr,
+} from "@/components/ui";
 
 type Tab = "upload" | "overwrite" | "name-split";
 
@@ -54,18 +81,28 @@ function UploadForm({
   }
 
   return (
-    <div style={{ margin: "1.5rem 0", padding: "1rem", border: "1px solid #ddd", borderRadius: 6 }}>
-      <h3 style={{ marginTop: 0 }}>{label}</h3>
-      <p style={{ color: "#666", fontSize: "0.9rem" }}>{description}</p>
-      <form onSubmit={handleSubmit}>
-        <input type="file" accept=".csv,.txt,.xlsx" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
-        <button type="submit" disabled={!file || busy} style={{ marginLeft: "1rem" }}>
-          {busy ? "Uploading…" : "Upload"}
-        </button>
-      </form>
-      {error && <p style={{ color: "crimson" }}>{error}</p>}
-      {message && <p style={{ color: "green" }}>{message}</p>}
-    </div>
+    <Card>
+      <CardHeader>
+        <CardTitle>{label}</CardTitle>
+        <CardDescription>{description}</CardDescription>
+      </CardHeader>
+      <CardBody className="space-y-3">
+        <form onSubmit={handleSubmit} className="flex flex-wrap items-center gap-3">
+          <input
+            type="file"
+            accept=".csv,.txt,.xlsx"
+            onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+            className="flex-1 text-sm text-ink-600 file:mr-3 file:cursor-pointer file:rounded-md file:border-0 file:bg-brand-50 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-brand-700 hover:file:bg-brand-100"
+          />
+          <Button type="submit" disabled={!file || busy}>
+            <Upload className="h-4 w-4" />
+            {busy ? "Uploading…" : "Upload"}
+          </Button>
+        </form>
+        {error && <Alert tone="danger">{error}</Alert>}
+        {message && <Alert tone="success">{message}</Alert>}
+      </CardBody>
+    </Card>
   );
 }
 
@@ -185,46 +222,38 @@ export default function SapCarpPage() {
     overwrite?.sap_ok && overwrite?.field_ok && overwrite?.mandant_ok && overwrite.match_count > 0;
 
   return (
-    <main style={{ padding: "3rem", maxWidth: 900, margin: "0 auto" }}>
-      <p>
-        <Link href={`/dashboard/projects/${projectId}`}>← Back to project</Link>
-      </p>
-      <h1>✏️ SAP-CARP-Ueberschreibung</h1>
-      <p style={{ color: "#666" }}>
-        Overwrite Mandanten fields from an SAP export via a field mapping, distribute CompanyName
-        into the SAP Name 1-4 export slots, and split natural-person names into first/last name.
-      </p>
+    <div className="space-y-6">
+      <Link
+        href={`/dashboard/projects/${projectId}`}
+        className="inline-flex items-center gap-1.5 text-sm font-medium text-ink-500 hover:text-ink-800"
+      >
+        <ArrowLeft className="h-3.5 w-3.5" />
+        Back to project
+      </Link>
 
-      <div style={{ display: "flex", gap: "0.5rem", margin: "1.5rem 0", borderBottom: "1px solid #ddd" }}>
-        {(
-          [
-            ["upload", "📤 SAP Data Upload"],
-            ["overwrite", "🔄 Mapping & Ueberschreibung"],
-            ["name-split", "🔤 Name Splitting"],
-          ] as [Tab, string][]
-        ).map(([key, label]) => (
-          <button
-            key={key}
-            onClick={() => setTab(key)}
-            style={{
-              padding: "0.5rem 1rem",
-              border: "none",
-              borderBottom: tab === key ? "2px solid #333" : "2px solid transparent",
-              background: "transparent",
-              fontWeight: tab === key ? 600 : 400,
-              cursor: "pointer",
-            }}
-          >
-            {label}
-          </button>
-        ))}
+      <div>
+        <h1 className="text-2xl font-semibold text-ink-900">SAP-CARP-Überschreibung</h1>
+        <p className="mt-1 text-sm text-ink-500">
+          Overwrite Mandanten fields from an SAP export via a field mapping, distribute CompanyName
+          into the SAP Name 1-4 export slots, and split natural-person names into first/last name.
+        </p>
       </div>
 
-      {error && <p style={{ color: "crimson" }}>{error}</p>}
-      {message && <p style={{ color: "green" }}>{message}</p>}
+      <Tabs
+        items={[
+          { key: "upload", label: "SAP Data Upload" },
+          { key: "overwrite", label: "Mapping & Überschreibung" },
+          { key: "name-split", label: "Name Splitting" },
+        ]}
+        active={tab}
+        onChange={(key) => setTab(key as Tab)}
+      />
+
+      {error && <Alert tone="danger">{error}</Alert>}
+      {message && <Alert tone="success">{message}</Alert>}
 
       {tab === "upload" && (
-        <>
+        <div className="space-y-6">
           <UploadForm
             label="SAP-Allgemeine Stammdaten"
             description="Join key: 'IDParty' on newer exports, 'Ext. Partnernummer' on older ones."
@@ -249,165 +278,230 @@ export default function SapCarpPage() {
               return `Loaded ${r.row_count} mapping row(s).`;
             }}
           />
-        </>
+        </div>
       )}
 
       {tab === "overwrite" && overwrite && nameDist && (
-        <>
-          <h2>Step 1 — Overwrite Mandanten</h2>
-          <p style={{ color: "#666" }}>
-            Join: <code>mandanten.IDParty</code> = <code>SAP-Allgemeine Stammdaten.{overwrite.sap_key_col ?? "?"}</code>
-          </p>
-          <ul>
-            <li>{overwrite.field_ok ? "✅" : "❌"} Field-Mapping — {overwrite.mapping_rows} field mapping(s)</li>
-            <li>{overwrite.sap_ok ? "✅" : "❌"} SAP-Allgemeine Stammdaten uploaded</li>
-            <li>
-              {overwrite.match_count > 0 ? "✅" : "⚠️"} {overwrite.match_count} IDParty match(es)
-            </li>
-            {overwrite.already_flagged > 0 && <li>ℹ️ {overwrite.already_flagged} already SAP-overridden</li>}
-          </ul>
-          {overwrite.missing_sap.length > 0 && (
-            <p style={{ color: "#b58900" }}>
-              ⚠️ Field-Mapping references SAP column(s) not present in the upload:{" "}
-              {overwrite.missing_sap.join(", ")}
-            </p>
-          )}
-          {overwrite.col_map.length > 0 && (
-            <details style={{ margin: "1rem 0" }}>
-              <summary>Field mapping ({overwrite.col_map.length})</summary>
-              <table style={{ borderCollapse: "collapse", marginTop: "0.5rem" }}>
-                <thead>
-                  <tr>
-                    <th style={{ textAlign: "left", padding: "2px 8px" }}>Mandanten</th>
-                    <th style={{ textAlign: "left", padding: "2px 8px" }}>SAP</th>
-                    <th style={{ textAlign: "left", padding: "2px 8px" }}>Condition</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {overwrite.col_map.map((m) => (
-                    <tr key={m.mandant_column}>
-                      <td style={{ padding: "2px 8px" }}>{m.mandant_column}</td>
-                      <td style={{ padding: "2px 8px" }}>{m.sap_column}</td>
-                      <td style={{ padding: "2px 8px" }}>
-                        {m.condition ? `IsOrganisation = ${m.condition}` : "—"}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </details>
-          )}
-          <label style={{ display: "block", margin: "1rem 0" }}>
-            <input type="checkbox" checked={resetFlag} onChange={(e) => setResetFlag(e.target.checked)} />{" "}
-            Reset SapOverridden for all Mandanten before running
-          </label>
-          <button onClick={handleOverwriteRun} disabled={busy || !overwriteReady}>
-            ▶ Mandanten überschreiben
-          </button>
+        <div className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Step 1 — Overwrite Mandanten</CardTitle>
+              <CardDescription>
+                Join: <code>mandanten.IDParty</code> ={" "}
+                <code>SAP-Allgemeine Stammdaten.{overwrite.sap_key_col ?? "?"}</code>
+              </CardDescription>
+            </CardHeader>
+            <CardBody className="space-y-4">
+              <ul className="space-y-1.5 text-sm text-ink-700">
+                <li className="flex items-center gap-2">
+                  {overwrite.field_ok ? (
+                    <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" />
+                  ) : (
+                    <XCircle className="h-4 w-4 shrink-0 text-red-600" />
+                  )}
+                  Field-Mapping — {overwrite.mapping_rows} field mapping(s)
+                </li>
+                <li className="flex items-center gap-2">
+                  {overwrite.sap_ok ? (
+                    <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" />
+                  ) : (
+                    <XCircle className="h-4 w-4 shrink-0 text-red-600" />
+                  )}
+                  SAP-Allgemeine Stammdaten uploaded
+                </li>
+                <li className="flex items-center gap-2">
+                  {overwrite.match_count > 0 ? (
+                    <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" />
+                  ) : (
+                    <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600" />
+                  )}
+                  {overwrite.match_count} IDParty match(es)
+                </li>
+                {overwrite.already_flagged > 0 && (
+                  <li className="flex items-center gap-2 text-ink-600">
+                    <Info className="h-4 w-4 shrink-0 text-brand-600" />
+                    {overwrite.already_flagged} already SAP-overridden
+                  </li>
+                )}
+              </ul>
 
-          <hr style={{ margin: "2.5rem 0" }} />
+              {overwrite.missing_sap.length > 0 && (
+                <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-sm text-amber-800">
+                  <AlertTriangle className="h-4 w-4 shrink-0" />
+                  <div>
+                    Field-Mapping references SAP column(s) not present in the upload:{" "}
+                    {overwrite.missing_sap.join(", ")}
+                  </div>
+                </div>
+              )}
 
-          <h2>Step 2 — CompanyName → Name 1-4</h2>
-          <p style={{ color: "#666" }}>
-            For IsOrganisation=1 rows: wraps CompanyName word-by-word into SAP&apos;s Name 1-4 export
-            slots.
-          </p>
-          <p>
-            {nameDist.affected_rows} row(s) affected · {nameDist.already_split} already split
-          </p>
-          <label style={{ display: "block", margin: "0.5rem 0" }}>
-            Max characters per name field:{" "}
-            <input
-              type="number"
-              min={1}
-              max={200}
-              value={chunkSize}
-              onChange={(e) => setChunkSize(Number(e.target.value) || 40)}
-              style={{ width: "4rem" }}
-            />
-          </label>
-          <button onClick={handleNameDistRun} disabled={busy || nameDist.affected_rows === 0}>
-            ▶ CompanyName verteilen
-          </button>
-        </>
+              {overwrite.col_map.length > 0 && (
+                <details className="rounded-lg border border-ink-200">
+                  <summary className="cursor-pointer select-none px-3.5 py-2.5 text-sm font-medium text-ink-700">
+                    Field mapping ({overwrite.col_map.length})
+                  </summary>
+                  <div className="border-t border-ink-200 p-3">
+                    <Table>
+                      <Thead>
+                        <Tr>
+                          <Th>Mandanten</Th>
+                          <Th>SAP</Th>
+                          <Th>Condition</Th>
+                        </Tr>
+                      </Thead>
+                      <Tbody>
+                        {overwrite.col_map.map((m) => (
+                          <Tr key={m.mandant_column}>
+                            <Td>{m.mandant_column}</Td>
+                            <Td>{m.sap_column}</Td>
+                            <Td>{m.condition ? `IsOrganisation = ${m.condition}` : "—"}</Td>
+                          </Tr>
+                        ))}
+                      </Tbody>
+                    </Table>
+                  </div>
+                </details>
+              )}
+
+              <label className="flex items-center gap-2 text-sm text-ink-700">
+                <input
+                  type="checkbox"
+                  checked={resetFlag}
+                  onChange={(e) => setResetFlag(e.target.checked)}
+                  className="h-4 w-4 rounded border-ink-300 text-brand-600 focus:ring-2 focus:ring-brand-500/40"
+                />
+                Reset SapOverridden for all Mandanten before running
+              </label>
+
+              <Button onClick={handleOverwriteRun} disabled={busy || !overwriteReady}>
+                <PlayCircle className="h-4 w-4" />
+                Mandanten überschreiben
+              </Button>
+            </CardBody>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Step 2 — CompanyName → Name 1-4</CardTitle>
+              <CardDescription>
+                For IsOrganisation=1 rows: wraps CompanyName word-by-word into SAP&apos;s Name 1-4
+                export slots.
+              </CardDescription>
+            </CardHeader>
+            <CardBody className="space-y-4">
+              <p className="text-sm text-ink-600">
+                {nameDist.affected_rows} row(s) affected · {nameDist.already_split} already split
+              </p>
+              <div className="max-w-xs">
+                <Label htmlFor="chunk-size">Max characters per name field</Label>
+                <Input
+                  id="chunk-size"
+                  type="number"
+                  min={1}
+                  max={200}
+                  value={chunkSize}
+                  onChange={(e) => setChunkSize(Number(e.target.value) || 40)}
+                  className="w-24"
+                />
+              </div>
+              <Button onClick={handleNameDistRun} disabled={busy || nameDist.affected_rows === 0}>
+                <PlayCircle className="h-4 w-4" />
+                CompanyName verteilen
+              </Button>
+            </CardBody>
+          </Card>
+        </div>
       )}
 
       {tab === "name-split" && nameSplitStatus && (
-        <>
-          <h2>Step 3 — Name Splitting</h2>
-          <p style={{ color: "#666" }}>
-            Rule-based first/last-name extraction from CompanyName for natural persons
-            (IsOrganisation=0) without a SAP override. 3+-token names with no comma are resolved via
-            Claude when configured, otherwise flagged &quot;unklar&quot;.
-          </p>
-          <p>{nameSplitStatus.candidate_count} candidate(s) found</p>
+        <Card>
+          <CardHeader>
+            <CardTitle>Step 3 — Name Splitting</CardTitle>
+            <CardDescription>
+              Rule-based first/last-name extraction from CompanyName for natural persons
+              (IsOrganisation=0) without a SAP override. 3+-token names with no comma are resolved
+              via Claude when configured, otherwise flagged &quot;unklar&quot;.
+            </CardDescription>
+          </CardHeader>
+          <CardBody className="space-y-4">
+            <p className="text-sm text-ink-600">{nameSplitStatus.candidate_count} candidate(s) found</p>
 
-          {nameSplitStatus.cleanup_count > 0 && (
-            <div style={{ margin: "1rem 0" }}>
-              <p style={{ color: "#b58900" }}>
-                ⚠️ {nameSplitStatus.cleanup_count} record(s) have FirstName+LastName filled but
-                CompanyName not yet cleared.
-              </p>
-              <button onClick={handleClearCompanyName} disabled={busy}>
-                🧹 Clear CompanyName ({nameSplitStatus.cleanup_count})
-              </button>
-            </div>
-          )}
+            {nameSplitStatus.cleanup_count > 0 && (
+              <div className="space-y-2">
+                <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-sm text-amber-800">
+                  <AlertTriangle className="h-4 w-4 shrink-0" />
+                  <div>
+                    {nameSplitStatus.cleanup_count} record(s) have FirstName+LastName filled but
+                    CompanyName not yet cleared.
+                  </div>
+                </div>
+                <Button variant="secondary" onClick={handleClearCompanyName} disabled={busy}>
+                  Clear CompanyName ({nameSplitStatus.cleanup_count})
+                </Button>
+              </div>
+            )}
 
-          <button onClick={handlePreview} disabled={busy || nameSplitStatus.candidate_count === 0}>
-            ▶ Vorschau generieren ({nameSplitStatus.candidate_count})
-          </button>
+            <Button onClick={handlePreview} disabled={busy || nameSplitStatus.candidate_count === 0}>
+              <PlayCircle className="h-4 w-4" />
+              Vorschau generieren ({nameSplitStatus.candidate_count})
+            </Button>
 
-          {preview && (
-            <>
-              <table style={{ borderCollapse: "collapse", width: "100%", marginTop: "1rem", fontSize: "0.9rem" }}>
-                <thead>
-                  <tr>
-                    <th style={{ textAlign: "left", padding: "4px 8px" }}>Apply</th>
-                    <th style={{ textAlign: "left", padding: "4px 8px" }}>CompanyName</th>
-                    <th style={{ textAlign: "left", padding: "4px 8px" }}>First name</th>
-                    <th style={{ textAlign: "left", padding: "4px 8px" }}>Last name</th>
-                    <th style={{ textAlign: "left", padding: "4px 8px" }}>Method</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {preview.map((r) => (
-                    <tr key={r.id_party}>
-                      <td style={{ padding: "4px 8px" }}>
-                        <input
-                          type="checkbox"
-                          checked={applied.has(r.id_party)}
-                          onChange={(e) => {
-                            const next = new Set(applied);
-                            if (e.target.checked) next.add(r.id_party);
-                            else next.delete(r.id_party);
-                            setApplied(next);
-                          }}
-                        />
-                      </td>
-                      <td style={{ padding: "4px 8px" }}>{r.company_name}</td>
-                      <td style={{ padding: "4px 8px" }}>{r.first_name}</td>
-                      <td style={{ padding: "4px 8px" }}>{r.last_name}</td>
-                      <td style={{ padding: "4px 8px" }}>{r.method}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              <p style={{ margin: "0.5rem 0" }}>
-                {applied.size} of {preview.length} selected
-              </p>
-              <button onClick={handleApply} disabled={busy || applied.size === 0}>
-                ✅ Ausgewählte anwenden ({applied.size})
-              </button>
-            </>
-          )}
-        </>
+            {preview && (
+              <div className="space-y-3">
+                <Table>
+                  <Thead>
+                    <Tr>
+                      <Th>Apply</Th>
+                      <Th>CompanyName</Th>
+                      <Th>First name</Th>
+                      <Th>Last name</Th>
+                      <Th>Method</Th>
+                    </Tr>
+                  </Thead>
+                  <Tbody>
+                    {preview.map((r) => (
+                      <Tr key={r.id_party}>
+                        <Td>
+                          <input
+                            type="checkbox"
+                            checked={applied.has(r.id_party)}
+                            onChange={(e) => {
+                              const next = new Set(applied);
+                              if (e.target.checked) next.add(r.id_party);
+                              else next.delete(r.id_party);
+                              setApplied(next);
+                            }}
+                            className="h-4 w-4 rounded border-ink-300 text-brand-600 focus:ring-2 focus:ring-brand-500/40"
+                          />
+                        </Td>
+                        <Td>{r.company_name}</Td>
+                        <Td>{r.first_name}</Td>
+                        <Td>{r.last_name}</Td>
+                        <Td>{r.method}</Td>
+                      </Tr>
+                    ))}
+                  </Tbody>
+                </Table>
+                <div className="flex items-center justify-between">
+                  <p className="text-sm text-ink-600">
+                    {applied.size} of {preview.length} selected
+                  </p>
+                  <Button onClick={handleApply} disabled={busy || applied.size === 0}>
+                    <CheckCircle2 className="h-4 w-4" />
+                    Ausgewählte anwenden ({applied.size})
+                  </Button>
+                </div>
+              </div>
+            )}
+          </CardBody>
+        </Card>
       )}
 
-      <hr style={{ margin: "2.5rem 0" }} />
-      <button onClick={handleMarkDone} disabled={busy}>
-        Mark this stage as done
-      </button>
-    </main>
+      <div className="flex justify-end border-t border-ink-200 pt-6">
+        <Button variant="secondary" onClick={handleMarkDone} disabled={busy}>
+          Mark this stage as done
+        </Button>
+      </div>
+    </div>
   );
 }

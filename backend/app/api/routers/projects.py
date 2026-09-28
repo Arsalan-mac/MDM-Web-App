@@ -1,12 +1,13 @@
 import uuid
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_tenant_db
 from app.cleansing.pipeline import set_stage_status
+from app.cleansing.project_service import ProjectNotFound, delete_project, rename_project
 from app.models.tenant import Project, Stage
 
 router = APIRouter(prefix="/projects", tags=["projects"])
@@ -65,6 +66,35 @@ async def get_project(project_id: uuid.UUID, db: AsyncSession = Depends(get_tena
     project = result.scalar_one()
     await db.refresh(project, attribute_names=["stages"])
     return project
+
+
+class RenameProjectRequest(BaseModel):
+    name: str
+
+
+@router.patch("/{project_id}", response_model=ProjectOut)
+async def rename_project_route(
+    project_id: uuid.UUID,
+    payload: RenameProjectRequest,
+    db: AsyncSession = Depends(get_tenant_db),
+) -> Project:
+    try:
+        project = await rename_project(db, project_id, payload.name)
+    except ProjectNotFound as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    await db.refresh(project, attribute_names=["stages"])
+    return project
+
+
+@router.delete("/{project_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_project_route(
+    project_id: uuid.UUID,
+    db: AsyncSession = Depends(get_tenant_db),
+) -> None:
+    try:
+        await delete_project(db, project_id)
+    except ProjectNotFound as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
 
 
 class UpdateStageStatusRequest(BaseModel):

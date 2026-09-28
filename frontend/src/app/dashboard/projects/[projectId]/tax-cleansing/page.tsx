@@ -5,6 +5,16 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useState } from "react";
 import {
+  ArrowLeft,
+  ArrowRight,
+  Euro,
+  Plus,
+  RefreshCw,
+  Rocket,
+  Save,
+  Trash2,
+} from "lucide-react";
+import {
   deleteTaxtypeRemaps,
   deleteTaxtypeRowFixes,
   getCollisionSuggestion,
@@ -37,41 +47,70 @@ import {
   type VatDuplicateRow,
   type VatMappingEntry,
 } from "@/lib/api";
+import {
+  Alert,
+  Badge,
+  Button,
+  Card,
+  CardBody,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+  Input,
+  Select,
+  Table,
+  Tabs,
+  Tbody,
+  Td,
+  Th,
+  Thead,
+  Tr,
+} from "@/components/ui";
 
 type Tab = "fiscal" | "vat" | "migration";
 type FiscalSubTab = "analyse" | "regelwerk";
 
-const cell: React.CSSProperties = { border: "1px solid #ccc", padding: "3px 8px" };
-const input: React.CSSProperties = { width: "100%", padding: "2px 4px", fontSize: "0.85rem" };
+function findingTone(finding: string): "neutral" | "brand" | "success" | "warning" | "danger" {
+  const f = finding.toUpperCase();
+  if (f.includes("COLLISION")) return "danger";
+  if (f.includes("UNKNOWN") || f.includes("OBSOLETE") || f.includes("MISMATCH")) return "warning";
+  if (f.includes("HINT")) return "brand";
+  return "neutral";
+}
 
 function QualityReportTable({ rows }: { rows: QualityReportRow[] }) {
   if (rows.length === 0) return null;
   return (
-    <table style={{ borderCollapse: "collapse", marginTop: "0.75rem", fontSize: "0.85rem" }}>
-      <thead>
-        <tr>
-          {["Typ", "Clients", "Valid", "Junk", "Empty", "% Valid", "% Junk", "% Empty"].map((h) => (
-            <th key={h} style={cell}>
-              {h}
-            </th>
+    <div className="mt-4">
+      <Table>
+        <Thead>
+          <Tr>
+            <Th>Typ</Th>
+            <Th>Clients</Th>
+            <Th>Valid</Th>
+            <Th>Junk</Th>
+            <Th>Empty</Th>
+            <Th>% Valid</Th>
+            <Th>% Junk</Th>
+            <Th>% Empty</Th>
+          </Tr>
+        </Thead>
+        <Tbody>
+          {rows.map((r) => (
+            <Tr key={r.type}>
+              <Td className="font-medium text-ink-900">{r.type}</Td>
+              <Td>{r.total_clients}</Td>
+              <Td>{r.total_valid}</Td>
+              <Td>{r.total_junk}</Td>
+              <Td>{r.total_empty}</Td>
+              <Td>{r.pct_valid}%</Td>
+              <Td>{r.pct_junk}%</Td>
+              <Td>{r.pct_empty}%</Td>
+            </Tr>
           ))}
-        </tr>
-      </thead>
-      <tbody>
-        {rows.map((r) => (
-          <tr key={r.type}>
-            <td style={cell}>{r.type}</td>
-            <td style={cell}>{r.total_clients}</td>
-            <td style={cell}>{r.total_valid}</td>
-            <td style={cell}>{r.total_junk}</td>
-            <td style={cell}>{r.total_empty}</td>
-            <td style={cell}>{r.pct_valid}%</td>
-            <td style={cell}>{r.pct_junk}%</td>
-            <td style={cell}>{r.pct_empty}%</td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
+        </Tbody>
+      </Table>
+    </div>
   );
 }
 
@@ -137,9 +176,9 @@ function FiscalRulesEditor({ projectId }: { projectId: string }) {
 
   if (rules === null) {
     return (
-      <button onClick={load} disabled={busy}>
+      <Button variant="secondary" onClick={load} disabled={busy}>
         {busy ? "Loading…" : "Load rules"}
-      </button>
+      </Button>
     );
   }
 
@@ -148,50 +187,56 @@ function FiscalRulesEditor({ projectId }: { projectId: string }) {
     .filter(({ r }) => !search || r.country_code.toUpperCase().includes(search.toUpperCase()));
 
   return (
-    <div>
-      {error && <p style={{ color: "crimson" }}>{error}</p>}
-      {message && <p style={{ color: "green" }}>{message}</p>}
-      <div style={{ display: "flex", gap: "1rem", alignItems: "center", margin: "0.5rem 0" }}>
-        <input
+    <div className="space-y-4">
+      {error && <Alert tone="danger">{error}</Alert>}
+      {message && <Alert tone="success">{message}</Alert>}
+      <div className="flex flex-wrap items-center gap-3">
+        <Input
           placeholder="Search country code…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          style={{ padding: "0.3rem", width: "12rem" }}
+          className="w-48"
         />
-        <span style={{ color: "#666", fontSize: "0.85rem" }}>
+        <span className="text-sm text-ink-500">
           {filtered.length} of {rules.length} rules shown
         </span>
-        <button onClick={handleSave} disabled={busy}>
-          💾 Save changes
-        </button>
-        <button onClick={handleReset} disabled={busy}>
-          🔄 Reset to code defaults
-        </button>
+        <Button size="sm" onClick={handleSave} disabled={busy}>
+          <Save className="h-3.5 w-3.5" />
+          Save changes
+        </Button>
+        <Button size="sm" variant="secondary" onClick={handleReset} disabled={busy}>
+          <RefreshCw className="h-3.5 w-3.5" />
+          Reset to code defaults
+        </Button>
       </div>
-      <div style={{ overflowX: "auto", maxHeight: 500, overflowY: "auto", border: "1px solid #eee" }}>
-        <table style={{ borderCollapse: "collapse", fontSize: "0.85rem", width: "100%" }}>
-          <thead>
-            <tr>
-              {["Land", "Typ", "SAP Code", "Regex", "Aliases (JSON)", "Description", "Confidence"].map((h) => (
-                <th key={h} style={{ ...cell, position: "sticky", top: 0, background: "#f5f5f5" }}>
-                  {h}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
+      <div className="max-h-[500px] overflow-auto rounded-lg border border-ink-200">
+        <table className="w-full text-left text-sm">
+          <Thead className="sticky top-0 z-10">
+            <Tr>
+              <Th>Land</Th>
+              <Th>SAP Code</Th>
+              <Th>Regex</Th>
+              <Th>Aliases (JSON)</Th>
+              <Th>Description</Th>
+              <Th>Confidence</Th>
+            </Tr>
+          </Thead>
+          <Tbody>
             {filtered.map(({ r, idx }) => (
-              <tr key={`${r.country_code}-${r.entity_type}`}>
-                <td style={cell}>
+              <Tr key={`${r.country_code}-${r.entity_type}`}>
+                <Td className="whitespace-nowrap text-ink-900">
                   {r.country_code} / {r.entity_type}
-                </td>
-                <td style={cell}>{r.sap_code}</td>
-                <td style={cell}>
-                  <input style={input} value={r.regex} onChange={(e) => updateRule(idx, { regex: e.target.value })} />
-                </td>
-                <td style={cell}>
-                  <input
-                    style={input}
+                </Td>
+                <Td className="whitespace-nowrap">{r.sap_code}</Td>
+                <Td className="min-w-[10rem]">
+                  <Input
+                    value={r.regex}
+                    onChange={(e) => updateRule(idx, { regex: e.target.value })}
+                    className="text-xs"
+                  />
+                </Td>
+                <Td className="min-w-[10rem]">
+                  <Input
                     value={JSON.stringify(r.aliases)}
                     onChange={(e) => {
                       try {
@@ -201,29 +246,30 @@ function FiscalRulesEditor({ projectId }: { projectId: string }) {
                         // ignore until valid JSON
                       }
                     }}
+                    className="text-xs"
                   />
-                </td>
-                <td style={cell}>
-                  <input
-                    style={input}
+                </Td>
+                <Td className="min-w-[12rem]">
+                  <Input
                     value={r.description}
                     onChange={(e) => updateRule(idx, { description: e.target.value })}
+                    className="text-xs"
                   />
-                </td>
-                <td style={cell}>
-                  <select
+                </Td>
+                <Td className="min-w-[8rem]">
+                  <Select
                     value={r.confidence}
                     onChange={(e) => updateRule(idx, { confidence: e.target.value })}
-                    style={input}
+                    className="text-xs"
                   >
                     <option value="HIGH">HIGH</option>
                     <option value="MEDIUM">MEDIUM</option>
                     <option value="LOW">LOW</option>
-                  </select>
-                </td>
-              </tr>
+                  </Select>
+                </Td>
+              </Tr>
             ))}
-          </tbody>
+          </Tbody>
         </table>
       </div>
     </div>
@@ -403,247 +449,304 @@ function MigrationPreparationTab({ projectId }: { projectId: string }) {
   }
 
   return (
-    <div>
-      {error && <p style={{ color: "crimson" }}>{error}</p>}
-      {message && <p style={{ color: "green" }}>{message}</p>}
+    <div className="space-y-6">
+      {error && <Alert tone="danger">{error}</Alert>}
+      {message && <Alert tone="success">{message}</Alert>}
 
-      <h3>Run migration</h3>
-      <p style={{ color: "#666" }}>
-        Excludes each track&apos;s own junk population, applies country/entity TAXTYPE assignment
-        (VAT: country -&gt; code mapping below, Russia always splits into RU1/RU3, Canada is
-        pattern-assigned; Steuernummer: this project&apos;s FiscalRule SAP codes), then writes the
-        result and re-validates TAXTYPE codes against the official SAP category list.
-      </p>
-      <div style={{ display: "flex", gap: "1rem" }}>
-        <button onClick={handleRunVatMigration} disabled={busy}>
-          🚀 Run VAT Migration
-        </button>
-        <button onClick={handleRunSteuerMigration} disabled={busy}>
-          🚀 Run Steuernummer Migration
-        </button>
-      </div>
-      {migrationResult && (
-        <p style={{ marginTop: "0.5rem", color: "#666", fontSize: "0.85rem" }}>
-          {migrationResult.total_raw} total · {migrationResult.total_junk_removed} junk excluded ·{" "}
-          {migrationResult.total_empty_removed} empty excluded · {migrationResult.migrated} migrated
-        </p>
-      )}
+      <Card>
+        <CardHeader>
+          <CardTitle>Run migration</CardTitle>
+          <CardDescription>
+            Excludes each track&apos;s own junk population, applies country/entity TAXTYPE assignment
+            (VAT: country -&gt; code mapping below, Russia always splits into RU1/RU3, Canada is
+            pattern-assigned; Steuernummer: this project&apos;s FiscalRule SAP codes), then writes the
+            result and re-validates TAXTYPE codes against the official SAP category list.
+          </CardDescription>
+        </CardHeader>
+        <CardBody className="space-y-3">
+          <div className="flex flex-wrap gap-3">
+            <Button onClick={handleRunVatMigration} disabled={busy}>
+              <Rocket className="h-4 w-4" />
+              Run VAT Migration
+            </Button>
+            <Button onClick={handleRunSteuerMigration} disabled={busy}>
+              <Rocket className="h-4 w-4" />
+              Run Steuernummer Migration
+            </Button>
+          </div>
+          {migrationResult && (
+            <p className="text-sm text-ink-500">
+              {migrationResult.total_raw} total · {migrationResult.total_junk_removed} junk excluded ·{" "}
+              {migrationResult.total_empty_removed} empty excluded · {migrationResult.migrated} migrated
+            </p>
+          )}
+        </CardBody>
+      </Card>
 
-      <hr style={{ margin: "2rem 0" }} />
-
-      <h3>TAXTYPE validation</h3>
-      <button onClick={loadValidation} disabled={busy}>
-        🔄 Refresh validation
-      </button>
-      {validation && (
-        <>
-          {validation.error ? (
-            <p style={{ color: "#888" }}>{validation.error}</p>
-          ) : (
+      <Card>
+        <CardHeader>
+          <CardTitle>TAXTYPE validation</CardTitle>
+        </CardHeader>
+        <CardBody className="space-y-4">
+          <Button size="sm" variant="secondary" onClick={loadValidation} disabled={busy}>
+            <RefreshCw className="h-3.5 w-3.5" />
+            Refresh validation
+          </Button>
+          {validation && (
             <>
-              <p style={{ marginTop: "0.5rem" }}>
-                {validation.total} row(s) · unknown: {validation.unknown} · obsolete:{" "}
-                {validation.obsolete} · country mismatch: {validation.mismatch} · VAT-category hint:{" "}
-                {validation.vat_hint} · key collisions: {validation.collision}
-              </p>
-              {validation.findings && validation.findings.length > 0 && (
-                <table style={{ borderCollapse: "collapse", fontSize: "0.8rem", width: "100%" }}>
-                  <thead>
-                    <tr>
-                      {["Migration", "IDParty", "TAXTYPE", "Country", "Finding", "SAP Description", ""].map((h) => (
-                        <th key={h} style={cell}>
-                          {h}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {validation.findings.slice(0, 100).map((f, i) => (
-                      <tr key={i}>
-                        <td style={cell}>{f.migration}</td>
-                        <td style={cell}>{f.id_party}</td>
-                        <td style={cell}>{f.taxtype}</td>
-                        <td style={cell}>{f.country_code}</td>
-                        <td style={cell}>{f.finding}</td>
-                        <td style={cell}>{f.sap_description}</td>
-                        <td style={cell}>
-                          {f.finding === "KEY_COLLISION" && (
-                            <button onClick={() => handleSuggest(f)} disabled={busy}>
-                              Fix this row…
-                            </button>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+              {validation.error ? (
+                <p className="text-sm text-ink-500">{validation.error}</p>
+              ) : (
+                <>
+                  <p className="text-sm text-ink-700">
+                    {validation.total} row(s) · unknown: {validation.unknown} · obsolete:{" "}
+                    {validation.obsolete} · country mismatch: {validation.mismatch} · VAT-category hint:{" "}
+                    {validation.vat_hint} · key collisions: {validation.collision}
+                  </p>
+                  {validation.findings && validation.findings.length > 0 && (
+                    <Table>
+                      <Thead>
+                        <Tr>
+                          <Th>Migration</Th>
+                          <Th>IDParty</Th>
+                          <Th>TAXTYPE</Th>
+                          <Th>Country</Th>
+                          <Th>Finding</Th>
+                          <Th>SAP Description</Th>
+                          <Th></Th>
+                        </Tr>
+                      </Thead>
+                      <Tbody>
+                        {validation.findings.slice(0, 100).map((f, i) => (
+                          <Tr key={i}>
+                            <Td>{f.migration}</Td>
+                            <Td>{f.id_party}</Td>
+                            <Td>{f.taxtype}</Td>
+                            <Td>{f.country_code}</Td>
+                            <Td>
+                              <Badge tone={findingTone(f.finding)}>{f.finding}</Badge>
+                            </Td>
+                            <Td>{f.sap_description}</Td>
+                            <Td>
+                              {f.finding === "KEY_COLLISION" && (
+                                <Button size="sm" variant="secondary" onClick={() => handleSuggest(f)} disabled={busy}>
+                                  Fix this row…
+                                </Button>
+                              )}
+                            </Td>
+                          </Tr>
+                        ))}
+                      </Tbody>
+                    </Table>
+                  )}
+                </>
               )}
             </>
           )}
-        </>
-      )}
+        </CardBody>
+      </Card>
 
-      <hr style={{ margin: "2rem 0" }} />
+      <Card>
+        <CardHeader>
+          <CardTitle>TAXTYPE remap (global, by source code)</CardTitle>
+          <CardDescription>Re-applied to every future migration run.</CardDescription>
+        </CardHeader>
+        <CardBody className="space-y-4">
+          <Button size="sm" variant="secondary" onClick={loadRemaps} disabled={busy}>
+            {remaps === null ? "Load remaps" : "Reload"}
+          </Button>
+          {remaps !== null && (
+            <>
+              {remaps.length > 0 && (
+                <Table>
+                  <Tbody>
+                    {remaps.map((r) => (
+                      <Tr key={r.source_code}>
+                        <Td>{r.source_code}</Td>
+                        <Td>
+                          <ArrowRight className="h-3.5 w-3.5 text-ink-400" />
+                        </Td>
+                        <Td>{r.target_code}</Td>
+                        <Td>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="text-red-600 hover:bg-red-50 hover:text-red-700"
+                            onClick={() => handleDeleteRemap(r.source_code)}
+                            disabled={busy}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                            Delete
+                          </Button>
+                        </Td>
+                      </Tr>
+                    ))}
+                  </Tbody>
+                </Table>
+              )}
+              <div className="flex flex-wrap items-center gap-2">
+                <Input
+                  placeholder="Source code"
+                  value={newRemapSource}
+                  onChange={(e) => setNewRemapSource(e.target.value)}
+                  className="w-32"
+                />
+                <Input
+                  placeholder="Target code"
+                  value={newRemapTarget}
+                  onChange={(e) => setNewRemapTarget(e.target.value)}
+                  className="w-32"
+                />
+                <Button size="sm" onClick={handleAddRemap} disabled={busy}>
+                  <Plus className="h-3.5 w-3.5" />
+                  Add
+                </Button>
+              </div>
+            </>
+          )}
+        </CardBody>
+      </Card>
 
-      <h3>TAXTYPE remap (global, by source code)</h3>
-      <p style={{ color: "#666" }}>Re-applied to every future migration run.</p>
-      <button onClick={loadRemaps} disabled={busy}>
-        {remaps === null ? "Load remaps" : "Reload"}
-      </button>
-      {remaps !== null && (
-        <>
-          <table style={{ borderCollapse: "collapse", fontSize: "0.85rem", marginTop: "0.5rem" }}>
-            <tbody>
-              {remaps.map((r) => (
-                <tr key={r.source_code}>
-                  <td style={cell}>{r.source_code}</td>
-                  <td style={cell}>→</td>
-                  <td style={cell}>{r.target_code}</td>
-                  <td style={cell}>
-                    <button onClick={() => handleDeleteRemap(r.source_code)} disabled={busy}>
-                      Delete
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.5rem" }}>
-            <input
-              placeholder="Source code"
-              value={newRemapSource}
-              onChange={(e) => setNewRemapSource(e.target.value)}
-              style={{ width: "8rem" }}
-            />
-            <input
-              placeholder="Target code"
-              value={newRemapTarget}
-              onChange={(e) => setNewRemapTarget(e.target.value)}
-              style={{ width: "8rem" }}
-            />
-            <button onClick={handleAddRemap} disabled={busy}>
-              Add
-            </button>
-          </div>
-        </>
-      )}
+      <Card>
+        <CardHeader>
+          <CardTitle>TAXTYPE row fix (one specific record)</CardTitle>
+          <CardDescription>
+            Resolves a collision for one IDParty + Migration + source code, without affecting other rows
+            sharing that source code.
+          </CardDescription>
+        </CardHeader>
+        <CardBody className="space-y-4">
+          <Button size="sm" variant="secondary" onClick={loadRowFixes} disabled={busy}>
+            {rowFixes === null ? "Load row fixes" : "Reload"}
+          </Button>
+          {rowFixes !== null && (
+            <>
+              {rowFixes.length > 0 && (
+                <Table>
+                  <Tbody>
+                    {rowFixes.map((f) => (
+                      <Tr key={`${f.id_party}-${f.migration}-${f.source_code}`}>
+                        <Td>{f.id_party}</Td>
+                        <Td>{f.migration}</Td>
+                        <Td>{f.source_code}</Td>
+                        <Td>
+                          <ArrowRight className="h-3.5 w-3.5 text-ink-400" />
+                        </Td>
+                        <Td>{f.target_code}</Td>
+                        <Td>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="text-red-600 hover:bg-red-50 hover:text-red-700"
+                            onClick={() => handleDeleteRowFix(f)}
+                            disabled={busy}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                            Delete
+                          </Button>
+                        </Td>
+                      </Tr>
+                    ))}
+                  </Tbody>
+                </Table>
+              )}
+              <div className="flex flex-wrap items-center gap-2">
+                <Input
+                  placeholder="IDParty"
+                  value={newFixIdParty}
+                  onChange={(e) => setNewFixIdParty(e.target.value)}
+                  className="w-32"
+                />
+                <Select
+                  value={newFixMigration}
+                  onChange={(e) => setNewFixMigration(e.target.value)}
+                  className="w-44"
+                >
+                  <option value="VAT">VAT</option>
+                  <option value="STEUERNUMMER">STEUERNUMMER</option>
+                </Select>
+                <Input
+                  placeholder="Source code"
+                  value={newFixSource}
+                  onChange={(e) => setNewFixSource(e.target.value)}
+                  className="w-32"
+                />
+                <Input
+                  placeholder="Target code"
+                  value={newFixTarget}
+                  onChange={(e) => setNewFixTarget(e.target.value)}
+                  className="w-32"
+                />
+                <Button size="sm" onClick={handleAddRowFix} disabled={busy}>
+                  <Plus className="h-3.5 w-3.5" />
+                  Add
+                </Button>
+              </div>
+            </>
+          )}
+        </CardBody>
+      </Card>
 
-      <hr style={{ margin: "2rem 0" }} />
-
-      <h3>TAXTYPE row fix (one specific record)</h3>
-      <p style={{ color: "#666" }}>
-        Resolves a collision for one IDParty + Migration + source code, without affecting other rows
-        sharing that source code.
-      </p>
-      <button onClick={loadRowFixes} disabled={busy}>
-        {rowFixes === null ? "Load row fixes" : "Reload"}
-      </button>
-      {rowFixes !== null && (
-        <>
-          <table style={{ borderCollapse: "collapse", fontSize: "0.85rem", marginTop: "0.5rem" }}>
-            <tbody>
-              {rowFixes.map((f) => (
-                <tr key={`${f.id_party}-${f.migration}-${f.source_code}`}>
-                  <td style={cell}>{f.id_party}</td>
-                  <td style={cell}>{f.migration}</td>
-                  <td style={cell}>{f.source_code}</td>
-                  <td style={cell}>→</td>
-                  <td style={cell}>{f.target_code}</td>
-                  <td style={cell}>
-                    <button onClick={() => handleDeleteRowFix(f)} disabled={busy}>
-                      Delete
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.5rem", flexWrap: "wrap" }}>
-            <input
-              placeholder="IDParty"
-              value={newFixIdParty}
-              onChange={(e) => setNewFixIdParty(e.target.value)}
-              style={{ width: "8rem" }}
-            />
-            <select value={newFixMigration} onChange={(e) => setNewFixMigration(e.target.value)}>
-              <option value="VAT">VAT</option>
-              <option value="STEUERNUMMER">STEUERNUMMER</option>
-            </select>
-            <input
-              placeholder="Source code"
-              value={newFixSource}
-              onChange={(e) => setNewFixSource(e.target.value)}
-              style={{ width: "8rem" }}
-            />
-            <input
-              placeholder="Target code"
-              value={newFixTarget}
-              onChange={(e) => setNewFixTarget(e.target.value)}
-              style={{ width: "8rem" }}
-            />
-            <button onClick={handleAddRowFix} disabled={busy}>
-              Add
-            </button>
-          </div>
-        </>
-      )}
-
-      <hr style={{ margin: "2rem 0" }} />
-
-      <h3>VAT country → TAXTYPE mapping</h3>
-      <p style={{ color: "#666" }}>
-        Russia and Canada are handled by special-case logic and ignore this table (Canada&apos;s rows
-        here are documentary only).
-      </p>
-      {vatMapping === null ? (
-        <button onClick={loadVatMapping} disabled={busy}>
-          Load mapping
-        </button>
-      ) : (
-        <>
-          <div style={{ display: "flex", gap: "1rem", margin: "0.5rem 0" }}>
-            <button onClick={handleSaveVatMapping} disabled={busy}>
-              💾 Save changes
-            </button>
-            <button onClick={handleResetVatMapping} disabled={busy}>
-              🔄 Reset to official defaults
-            </button>
-          </div>
-          <div style={{ overflowY: "auto", maxHeight: 300, border: "1px solid #eee" }}>
-            <table style={{ borderCollapse: "collapse", fontSize: "0.85rem", width: "100%" }}>
-              <thead>
-                <tr>
-                  {["Code", "Region"].map((h) => (
-                    <th key={h} style={{ ...cell, position: "sticky", top: 0, background: "#f5f5f5" }}>
-                      {h}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {vatMapping.map((m, idx) => (
-                  <tr key={m.code}>
-                    <td style={cell}>{m.code}</td>
-                    <td style={cell}>
-                      <select
-                        value={m.region}
-                        onChange={(e) =>
-                          setVatMapping((prev) =>
-                            prev ? prev.map((r, i) => (i === idx ? { ...r, region: e.target.value } : r)) : prev,
-                          )
-                        }
-                      >
-                        <option value="EU / Europe">EU / Europe</option>
-                        <option value="Non-EU">Non-EU</option>
-                      </select>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </>
-      )}
+      <Card>
+        <CardHeader>
+          <CardTitle>VAT country → TAXTYPE mapping</CardTitle>
+          <CardDescription>
+            Russia and Canada are handled by special-case logic and ignore this table (Canada&apos;s rows
+            here are documentary only).
+          </CardDescription>
+        </CardHeader>
+        <CardBody className="space-y-4">
+          {vatMapping === null ? (
+            <Button variant="secondary" onClick={loadVatMapping} disabled={busy}>
+              Load mapping
+            </Button>
+          ) : (
+            <>
+              <div className="flex flex-wrap gap-3">
+                <Button size="sm" onClick={handleSaveVatMapping} disabled={busy}>
+                  <Save className="h-3.5 w-3.5" />
+                  Save changes
+                </Button>
+                <Button size="sm" variant="secondary" onClick={handleResetVatMapping} disabled={busy}>
+                  <RefreshCw className="h-3.5 w-3.5" />
+                  Reset to official defaults
+                </Button>
+              </div>
+              <div className="max-h-[300px] overflow-auto rounded-lg border border-ink-200">
+                <table className="w-full text-left text-sm">
+                  <Thead className="sticky top-0 z-10">
+                    <Tr>
+                      <Th>Code</Th>
+                      <Th>Region</Th>
+                    </Tr>
+                  </Thead>
+                  <Tbody>
+                    {vatMapping.map((m, idx) => (
+                      <Tr key={m.code}>
+                        <Td>{m.code}</Td>
+                        <Td className="min-w-[10rem]">
+                          <Select
+                            value={m.region}
+                            onChange={(e) =>
+                              setVatMapping((prev) =>
+                                prev ? prev.map((r, i) => (i === idx ? { ...r, region: e.target.value } : r)) : prev,
+                              )
+                            }
+                            className="text-xs"
+                          >
+                            <option value="EU / Europe">EU / Europe</option>
+                            <option value="Non-EU">Non-EU</option>
+                          </Select>
+                        </Td>
+                      </Tr>
+                    ))}
+                  </Tbody>
+                </table>
+              </div>
+            </>
+          )}
+        </CardBody>
+      </Card>
     </div>
   );
 }
@@ -716,247 +819,258 @@ export default function TaxCleansingPage() {
   }
 
   return (
-    <main style={{ padding: "3rem", maxWidth: 1100, margin: "0 auto" }}>
-      <p>
-        <Link href={`/dashboard/projects/${projectId}`}>← Back to project</Link>
-      </p>
-      <h1>💶 Tax Cleansing</h1>
-      <p style={{ color: "#666" }}>
-        Analysis and rule management for FiscalCode (Steuernummer) and VATNumber (USt-ID).
-      </p>
-      <p style={{ color: "#888", fontSize: "0.85rem" }}>
-        Note: Excel export and SAP-Abgleich sync remain out of scope for Migration Preparation - see
-        docs/ROADMAP.md.
-      </p>
+    <div className="space-y-6">
+      <Link
+        href={`/dashboard/projects/${projectId}`}
+        className="inline-flex items-center gap-1.5 text-sm font-medium text-ink-500 hover:text-ink-800"
+      >
+        <ArrowLeft className="h-3.5 w-3.5" />
+        Back to project
+      </Link>
 
-      <div style={{ display: "flex", gap: "0.5rem", margin: "1.5rem 0", borderBottom: "1px solid #ddd" }}>
-        {(
-          [
-            ["fiscal", "🧾 Steuernummer-Cleansing"],
-            ["vat", "💶 VAT-Cleansing"],
-            ["migration", "🚀 Migration Preparation"],
-          ] as [Tab, string][]
-        ).map(([key, label]) => (
-          <button
-            key={key}
-            onClick={() => setTab(key)}
-            style={{
-              padding: "0.5rem 1rem",
-              border: "none",
-              borderBottom: tab === key ? "2px solid #333" : "2px solid transparent",
-              background: "transparent",
-              fontWeight: tab === key ? 600 : 400,
-              cursor: "pointer",
-            }}
-          >
-            {label}
-          </button>
-        ))}
+      <div>
+        <h1 className="flex items-center gap-2 text-2xl font-semibold text-ink-900">
+          <Euro className="h-6 w-6 text-brand-600" />
+          Tax Cleansing
+        </h1>
+        <p className="mt-1 text-sm text-ink-500">
+          Analysis and rule management for FiscalCode (Steuernummer) and VATNumber (USt-ID).
+        </p>
+        <p className="mt-1 text-xs text-ink-400">
+          Note: Excel export and SAP-Abgleich sync remain out of scope for Migration Preparation - see
+          docs/ROADMAP.md.
+        </p>
       </div>
 
-      {error && <p style={{ color: "crimson" }}>{error}</p>}
-      {message && <p style={{ color: "green" }}>{message}</p>}
+      <Tabs
+        items={[
+          { key: "fiscal", label: "Steuernummer-Cleansing" },
+          { key: "vat", label: "VAT-Cleansing" },
+          { key: "migration", label: "Migration Preparation" },
+        ]}
+        active={tab}
+        onChange={(key) => setTab(key as Tab)}
+      />
+
+      {error && <Alert tone="danger">{error}</Alert>}
+      {message && <Alert tone="success">{message}</Alert>}
 
       {tab === "fiscal" && (
-        <>
-          <div style={{ display: "flex", gap: "1rem", marginBottom: "1rem" }}>
-            <button
-              onClick={() => setFiscalTab("analyse")}
-              style={{ fontWeight: fiscalTab === "analyse" ? 600 : 400 }}
-            >
-              ⚖️ Analyse
-            </button>
-            <button
-              onClick={() => setFiscalTab("regelwerk")}
-              style={{ fontWeight: fiscalTab === "regelwerk" ? 600 : 400 }}
-            >
-              📋 Regelwerk
-            </button>
-          </div>
+        <div className="space-y-6">
+          <Tabs
+            items={[
+              { key: "analyse", label: "Analyse" },
+              { key: "regelwerk", label: "Regelwerk" },
+            ]}
+            active={fiscalTab}
+            onChange={(key) => setFiscalTab(key as FiscalSubTab)}
+          />
 
           {fiscalTab === "analyse" && (
-            <>
-              <h3>FiscalCode Analysis</h3>
-              <p style={{ color: "#666" }}>
-                2-stage process: syntax check (length 5-20, invalid characters), then pattern
-                validation against this project&apos;s country/entity-type rules.
-              </p>
-              <button onClick={handleFiscalAnalyze} disabled={busy}>
-                🚀 Start FiscalCode Analysis
-              </button>
-              {fiscalResult && (
-                <>
-                  <p style={{ marginTop: "1rem" }}>
-                    {fiscalResult.junk.length === 0
-                      ? "✅ All Fiscal Codes are valid - no syntax or pattern errors!"
-                      : `❌ ${fiscalResult.junk.length} FiscalCode error(s) found.`}
-                  </p>
-                  {fiscalResult.junk.length > 0 && (
-                    <table style={{ borderCollapse: "collapse", fontSize: "0.85rem", width: "100%" }}>
-                      <thead>
-                        <tr>
-                          {["IDParty", "CompanyName", "Country", "FiscalCode", "Reason", "Allowed Pattern"].map(
-                            (h) => (
-                              <th key={h} style={cell}>
-                                {h}
-                              </th>
-                            ),
-                          )}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {fiscalResult.junk.slice(0, 50).map((r, i) => (
-                          <tr key={i}>
-                            <td style={cell}>{r.id_party}</td>
-                            <td style={cell}>{r.company_name}</td>
-                            <td style={cell}>{r.country_code}</td>
-                            <td style={cell}>{r.fiscal_code}</td>
-                            <td style={cell}>{r.reason}</td>
-                            <td style={cell}>{r.allowed_pattern}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  )}
-                  <QualityReportTable rows={fiscalResult.quality_report} />
-                </>
-              )}
-            </>
+            <Card>
+              <CardHeader>
+                <CardTitle>FiscalCode Analysis</CardTitle>
+                <CardDescription>
+                  2-stage process: syntax check (length 5-20, invalid characters), then pattern
+                  validation against this project&apos;s country/entity-type rules.
+                </CardDescription>
+              </CardHeader>
+              <CardBody className="space-y-4">
+                <Button onClick={handleFiscalAnalyze} disabled={busy}>
+                  <Rocket className="h-4 w-4" />
+                  Start FiscalCode Analysis
+                </Button>
+                {fiscalResult && (
+                  <>
+                    {fiscalResult.junk.length === 0 ? (
+                      <Alert tone="success">All Fiscal Codes are valid - no syntax or pattern errors!</Alert>
+                    ) : (
+                      <Alert tone="danger">{fiscalResult.junk.length} FiscalCode error(s) found.</Alert>
+                    )}
+                    {fiscalResult.junk.length > 0 && (
+                      <Table>
+                        <Thead>
+                          <Tr>
+                            <Th>IDParty</Th>
+                            <Th>CompanyName</Th>
+                            <Th>Country</Th>
+                            <Th>FiscalCode</Th>
+                            <Th>Reason</Th>
+                            <Th>Allowed Pattern</Th>
+                          </Tr>
+                        </Thead>
+                        <Tbody>
+                          {fiscalResult.junk.slice(0, 50).map((r, i) => (
+                            <Tr key={i}>
+                              <Td>{r.id_party}</Td>
+                              <Td>{r.company_name}</Td>
+                              <Td>{r.country_code}</Td>
+                              <Td>{r.fiscal_code}</Td>
+                              <Td>{r.reason}</Td>
+                              <Td>{r.allowed_pattern}</Td>
+                            </Tr>
+                          ))}
+                        </Tbody>
+                      </Table>
+                    )}
+                    <QualityReportTable rows={fiscalResult.quality_report} />
+                  </>
+                )}
+              </CardBody>
+            </Card>
           )}
 
           {fiscalTab === "regelwerk" && (
-            <>
-              <h3>Länder-Validierungsregeln</h3>
-              <p style={{ color: "#666" }}>
-                Regex patterns used to validate FiscalCode per country and entity type. Changes save
-                immediately to this project and take effect on the next analysis run.
-              </p>
-              <FiscalRulesEditor projectId={projectId} />
-            </>
+            <Card>
+              <CardHeader>
+                <CardTitle>Länder-Validierungsregeln</CardTitle>
+                <CardDescription>
+                  Regex patterns used to validate FiscalCode per country and entity type. Changes save
+                  immediately to this project and take effect on the next analysis run.
+                </CardDescription>
+              </CardHeader>
+              <CardBody>
+                <FiscalRulesEditor projectId={projectId} />
+              </CardBody>
+            </Card>
           )}
-        </>
+        </div>
       )}
 
       {tab === "vat" && (
-        <>
-          <h3>Unified VAT Analysis</h3>
-          <p style={{ color: "#666" }}>
-            3-stage process: backfill empty VATNumber from ViesNumber, syntax check, then pattern
-            validation against each country&apos;s VAT format.
-          </p>
-          <button onClick={handleAnalyze} disabled={busy}>
-            🚀 Start Unified VAT Analysis
-          </button>
+        <div className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Unified VAT Analysis</CardTitle>
+              <CardDescription>
+                3-stage process: backfill empty VATNumber from ViesNumber, syntax check, then pattern
+                validation against each country&apos;s VAT format.
+              </CardDescription>
+            </CardHeader>
+            <CardBody className="space-y-4">
+              <Button onClick={handleAnalyze} disabled={busy}>
+                <Rocket className="h-4 w-4" />
+                Start Unified VAT Analysis
+              </Button>
 
-          {vatResult && (
-            <>
-              {vatResult.ru_precleaning.length > 0 && (
-                <div style={{ margin: "1rem 0" }}>
-                  <h4>🇷🇺 RU pre-cleaning</h4>
-                  <table style={{ borderCollapse: "collapse", fontSize: "0.85rem" }}>
-                    <thead>
-                      <tr>
-                        {["IDParty", "Original", "INN", "KPP", "Reason"].map((h) => (
-                          <th key={h} style={cell}>
-                            {h}
-                          </th>
+              {vatResult && (
+                <>
+                  {vatResult.ru_precleaning.length > 0 && (
+                    <div>
+                      <h4 className="mb-2 text-sm font-semibold text-ink-900">RU pre-cleaning</h4>
+                      <Table>
+                        <Thead>
+                          <Tr>
+                            <Th>IDParty</Th>
+                            <Th>Original</Th>
+                            <Th>INN</Th>
+                            <Th>KPP</Th>
+                            <Th>Reason</Th>
+                          </Tr>
+                        </Thead>
+                        <Tbody>
+                          {vatResult.ru_precleaning.slice(0, 30).map((r, i) => (
+                            <Tr key={i}>
+                              <Td>{r.id_party}</Td>
+                              <Td>{r.vat_number_original}</Td>
+                              <Td>{r.inn_cleaned}</Td>
+                              <Td>{r.kpp_cleaned}</Td>
+                              <Td>{r.reason}</Td>
+                            </Tr>
+                          ))}
+                        </Tbody>
+                      </Table>
+                    </div>
+                  )}
+
+                  {vatResult.junk.length === 0 ? (
+                    <Alert tone="success">All VAT numbers are valid - no syntax or pattern errors!</Alert>
+                  ) : (
+                    <Alert tone="danger">{vatResult.junk.length} VAT error(s) found.</Alert>
+                  )}
+                  {vatResult.junk.length > 0 && (
+                    <Table>
+                      <Thead>
+                        <Tr>
+                          <Th>IDParty</Th>
+                          <Th>CompanyName</Th>
+                          <Th>Country</Th>
+                          <Th>VATNumber</Th>
+                          <Th>Reason</Th>
+                          <Th>Rule</Th>
+                        </Tr>
+                      </Thead>
+                      <Tbody>
+                        {vatResult.junk.slice(0, 50).map((r, i) => (
+                          <Tr key={i}>
+                            <Td>{r.id_party}</Td>
+                            <Td>{r.company_name}</Td>
+                            <Td>{r.country_code}</Td>
+                            <Td>{r.vat_number}</Td>
+                            <Td>{r.reason}</Td>
+                            <Td>{r.rule_used}</Td>
+                          </Tr>
                         ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {vatResult.ru_precleaning.slice(0, 30).map((r, i) => (
-                        <tr key={i}>
-                          <td style={cell}>{r.id_party}</td>
-                          <td style={cell}>{r.vat_number_original}</td>
-                          <td style={cell}>{r.inn_cleaned}</td>
-                          <td style={cell}>{r.kpp_cleaned}</td>
-                          <td style={cell}>{r.reason}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                      </Tbody>
+                    </Table>
+                  )}
+                  <QualityReportTable rows={vatResult.quality_report} />
+                </>
               )}
+            </CardBody>
+          </Card>
 
-              <p style={{ marginTop: "1rem" }}>
-                {vatResult.junk.length === 0
-                  ? "✅ All VAT numbers are valid - no syntax or pattern errors!"
-                  : `❌ ${vatResult.junk.length} VAT error(s) found.`}
-              </p>
-              {vatResult.junk.length > 0 && (
-                <table style={{ borderCollapse: "collapse", fontSize: "0.85rem", width: "100%" }}>
-                  <thead>
-                    <tr>
-                      {["IDParty", "CompanyName", "Country", "VATNumber", "Reason", "Rule"].map((h) => (
-                        <th key={h} style={cell}>
-                          {h}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {vatResult.junk.slice(0, 50).map((r, i) => (
-                      <tr key={i}>
-                        <td style={cell}>{r.id_party}</td>
-                        <td style={cell}>{r.company_name}</td>
-                        <td style={cell}>{r.country_code}</td>
-                        <td style={cell}>{r.vat_number}</td>
-                        <td style={cell}>{r.reason}</td>
-                        <td style={cell}>{r.rule_used}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+          <Card>
+            <CardHeader>
+              <CardTitle>VAT Duplicates</CardTitle>
+              <CardDescription>Mandanten sharing the same normalized VAT number.</CardDescription>
+            </CardHeader>
+            <CardBody className="space-y-4">
+              <Button onClick={handleDuplicates} disabled={busy}>
+                <Rocket className="h-4 w-4" />
+                Check for Duplicates
+              </Button>
+              {dupResult && (
+                <>
+                  {dupResult.length === 0 ? (
+                    <Alert tone="success">No VAT duplicates found.</Alert>
+                  ) : (
+                    <Alert tone="danger">{dupResult.length} duplicate row(s).</Alert>
+                  )}
+                  {dupResult.length > 0 && (
+                    <Table>
+                      <Thead>
+                        <Tr>
+                          <Th>IDParty</Th>
+                          <Th>CompanyName</Th>
+                          <Th>VATNumber</Th>
+                        </Tr>
+                      </Thead>
+                      <Tbody>
+                        {dupResult.map((r, i) => (
+                          <Tr key={i}>
+                            <Td>{r.id_party}</Td>
+                            <Td>{r.company_name}</Td>
+                            <Td>{r.vat_number}</Td>
+                          </Tr>
+                        ))}
+                      </Tbody>
+                    </Table>
+                  )}
+                </>
               )}
-              <QualityReportTable rows={vatResult.quality_report} />
-            </>
-          )}
-
-          <hr style={{ margin: "2.5rem 0" }} />
-
-          <h3>VAT Duplicates</h3>
-          <p style={{ color: "#666" }}>Mandanten sharing the same normalized VAT number.</p>
-          <button onClick={handleDuplicates} disabled={busy}>
-            🚀 Check for Duplicates
-          </button>
-          {dupResult && (
-            <>
-              <p style={{ marginTop: "1rem" }}>
-                {dupResult.length === 0 ? "✅ No VAT duplicates found." : `❌ ${dupResult.length} duplicate row(s).`}
-              </p>
-              {dupResult.length > 0 && (
-                <table style={{ borderCollapse: "collapse", fontSize: "0.85rem" }}>
-                  <thead>
-                    <tr>
-                      {["IDParty", "CompanyName", "VATNumber"].map((h) => (
-                        <th key={h} style={cell}>
-                          {h}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {dupResult.map((r, i) => (
-                      <tr key={i}>
-                        <td style={cell}>{r.id_party}</td>
-                        <td style={cell}>{r.company_name}</td>
-                        <td style={cell}>{r.vat_number}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </>
-          )}
-        </>
+            </CardBody>
+          </Card>
+        </div>
       )}
 
       {tab === "migration" && <MigrationPreparationTab projectId={projectId} />}
 
-      <hr style={{ margin: "2.5rem 0" }} />
-      <button onClick={handleMarkDone} disabled={busy}>
-        Mark this stage as done
-      </button>
-    </main>
+      <div className="flex justify-end border-t border-ink-200 pt-6">
+        <Button onClick={handleMarkDone} disabled={busy}>
+          Mark this stage as done
+        </Button>
+      </div>
+    </div>
   );
 }

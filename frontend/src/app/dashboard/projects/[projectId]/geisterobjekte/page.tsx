@@ -4,6 +4,7 @@ import { useAuth } from "@clerk/nextjs";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { ArrowLeft, FlaskConical, Ghost, Play, RotateCcw } from "lucide-react";
 import {
   getConsistencyCheck,
   getGeisterobjekteStatus,
@@ -13,6 +14,7 @@ import {
   type ConsistencyFinding,
   type GeisterobjekteStatus,
 } from "@/lib/api";
+import { Alert, Button, Card, CardBody, EmptyState } from "@/components/ui";
 
 export default function GeisterobjektePage() {
   const { projectId } = useParams<{ projectId: string }>();
@@ -91,63 +93,89 @@ export default function GeisterobjektePage() {
   }
 
   return (
-    <main style={{ padding: "3rem", maxWidth: 800, margin: "0 auto" }}>
-      <p>
-        <Link href={`/dashboard/projects/${projectId}`}>← Back to project</Link>
-      </p>
-      <h1>👻 Geisterobjekte</h1>
-      <p>
-        Identifies Mandanten with no connection to any Auftrag, connected party, or opponent
-        relationship, and moves them to a separate table (reversible).
-      </p>
+    <div className="space-y-6">
+      <Link
+        href={`/dashboard/projects/${projectId}`}
+        className="inline-flex items-center gap-1.5 text-sm font-medium text-ink-500 hover:text-ink-800"
+      >
+        <ArrowLeft className="h-3.5 w-3.5" />
+        Back to project
+      </Link>
 
-      {status && (
-        <div style={{ display: "flex", gap: "2rem", margin: "1.5rem 0" }}>
-          <div>
-            <div style={{ fontSize: "1.5rem", fontWeight: 600 }}>{status.mandant_count}</div>
-            <div style={{ color: "#666" }}>Rows in Mandanten</div>
-          </div>
-          <div>
-            <div style={{ fontSize: "1.5rem", fontWeight: 600 }}>{status.ghost_count}</div>
-            <div style={{ color: "#666" }}>Quarantined ghost objects</div>
-          </div>
+      <div className="flex items-center gap-3">
+        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-brand-100 text-brand-700">
+          <Ghost className="h-5 w-5" />
         </div>
-      )}
-
-      <div style={{ display: "flex", gap: "1rem" }}>
-        <button onClick={handleQuarantine} disabled={busy}>
-          ▶ Run ghost detection &amp; quarantine
-        </button>
-        <button onClick={handleRestore} disabled={busy || !status?.ghost_count}>
-          🔁 Restore all to Mandanten
-        </button>
+        <div>
+          <h1 className="text-2xl font-semibold text-ink-900">Geisterobjekte</h1>
+          <p className="text-sm text-ink-500">
+            Identifies Mandanten with no connection to any Auftrag, connected party, or opponent
+            relationship, and moves them to a separate table (reversible).
+          </p>
+        </div>
       </div>
 
-      {message && <p style={{ color: "green" }}>{message}</p>}
-      {error && <p style={{ color: "crimson" }}>{error}</p>}
+      <Card>
+        <CardBody className="space-y-4">
+          {status && (
+            <div className="flex gap-8">
+              <div>
+                <div className="text-2xl font-semibold text-ink-900">{status.mandant_count}</div>
+                <div className="text-sm text-ink-500">Rows in Mandanten</div>
+              </div>
+              <div>
+                <div className="text-2xl font-semibold text-ink-900">{status.ghost_count}</div>
+                <div className="text-sm text-ink-500">Quarantined ghost objects</div>
+              </div>
+            </div>
+          )}
 
-      <h2 style={{ marginTop: "2.5rem" }}>🧪 Consistency check</h2>
-      <p style={{ color: "#666" }}>
-        Result tables that still reference a now-quarantined ghost — their analysis ran before
-        the quarantine and should be re-run.
-      </p>
-      {findings.length === 0 ? (
-        <p style={{ color: "green" }}>✅ No stale references found.</p>
-      ) : (
-        <ul>
-          {findings.map((f) => (
-            <li key={f.table}>
-              <strong>{f.table}</strong>: {f.ghost_rows} row(s) reference a quarantined ghost —{" "}
-              {f.hint}
-            </li>
-          ))}
-        </ul>
-      )}
+          <div className="flex flex-wrap gap-3">
+            <Button onClick={handleQuarantine} disabled={busy}>
+              <Play className="h-4 w-4" />
+              Run ghost detection &amp; quarantine
+            </Button>
+            <Button variant="secondary" onClick={handleRestore} disabled={busy || !status?.ghost_count}>
+              <RotateCcw className="h-4 w-4" />
+              Restore all to Mandanten
+            </Button>
+          </div>
 
-      <hr style={{ margin: "2.5rem 0" }} />
-      <button onClick={handleMarkDone} disabled={busy}>
+          {message && <Alert tone="success">{message}</Alert>}
+          {error && <Alert tone="danger">{error}</Alert>}
+        </CardBody>
+      </Card>
+
+      <Card>
+        <CardBody className="space-y-3">
+          <div className="flex items-center gap-2">
+            <FlaskConical className="h-4 w-4 text-ink-400" />
+            <h2 className="text-sm font-semibold text-ink-900">Consistency check</h2>
+          </div>
+          <p className="text-sm text-ink-500">
+            Result tables that still reference a now-quarantined ghost — their analysis ran
+            before the quarantine and should be re-run.
+          </p>
+          {findings.length === 0 ? (
+            <EmptyState title="No stale references found" />
+          ) : (
+            <ul className="space-y-1.5 text-sm">
+              {findings.map((f) => (
+                <li key={f.table} className="rounded-lg bg-ink-50 px-3 py-2">
+                  <span className="font-semibold text-ink-900">{f.table}</span>
+                  <span className="text-ink-600">
+                    : {f.ghost_rows} row(s) reference a quarantined ghost — {f.hint}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </CardBody>
+      </Card>
+
+      <Button onClick={handleMarkDone} disabled={busy}>
         Mark this stage as done
-      </button>
-    </main>
+      </Button>
+    </div>
   );
 }

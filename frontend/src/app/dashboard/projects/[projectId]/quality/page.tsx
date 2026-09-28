@@ -4,6 +4,7 @@ import { useAuth } from "@clerk/nextjs";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useState } from "react";
+import { ArrowLeft, CheckCircle2, PlayCircle, XCircle } from "lucide-react";
 import {
   runAuftragIdProjectCheck,
   runCommunicationCheck,
@@ -22,70 +23,89 @@ import {
   type QualityReportRow,
   type RegisterNumberCheck,
 } from "@/lib/api";
+import {
+  Alert,
+  Button,
+  Card,
+  CardBody,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+  Input,
+  Table,
+  Tabs,
+  Tbody,
+  Td,
+  Th,
+  Thead,
+  Tr,
+} from "@/components/ui";
 
 type Tab = "cleanup" | "fuzzy" | "register" | "communication" | "completeness" | "date" | "auftrag";
 
 function QualityReportTable({ rows }: { rows: QualityReportRow[] }) {
   if (rows.length === 0) return null;
   return (
-    <table style={{ borderCollapse: "collapse", marginTop: "0.75rem", fontSize: "0.85rem" }}>
-      <thead>
-        <tr>
+    <Table className="mt-3">
+      <Thead>
+        <Tr>
           {["Typ", "Clients", "Valid", "Junk", "Empty", "% Valid", "% Junk", "% Empty"].map((h) => (
-            <th key={h} style={{ border: "1px solid #ccc", padding: "3px 8px", textAlign: "left" }}>
-              {h}
-            </th>
+            <Th key={h}>{h}</Th>
           ))}
-        </tr>
-      </thead>
-      <tbody>
+        </Tr>
+      </Thead>
+      <Tbody>
         {rows.map((r) => (
-          <tr key={r.type}>
-            <td style={{ border: "1px solid #ccc", padding: "3px 8px" }}>{r.type}</td>
-            <td style={{ border: "1px solid #ccc", padding: "3px 8px" }}>{r.total_clients}</td>
-            <td style={{ border: "1px solid #ccc", padding: "3px 8px" }}>{r.total_valid}</td>
-            <td style={{ border: "1px solid #ccc", padding: "3px 8px" }}>{r.total_junk}</td>
-            <td style={{ border: "1px solid #ccc", padding: "3px 8px" }}>{r.total_empty}</td>
-            <td style={{ border: "1px solid #ccc", padding: "3px 8px" }}>{r.pct_valid}%</td>
-            <td style={{ border: "1px solid #ccc", padding: "3px 8px" }}>{r.pct_junk}%</td>
-            <td style={{ border: "1px solid #ccc", padding: "3px 8px" }}>{r.pct_empty}%</td>
-          </tr>
+          <Tr key={r.type}>
+            <Td>{r.type}</Td>
+            <Td>{r.total_clients}</Td>
+            <Td>{r.total_valid}</Td>
+            <Td>{r.total_junk}</Td>
+            <Td>{r.total_empty}</Td>
+            <Td>{r.pct_valid}%</Td>
+            <Td>{r.pct_junk}%</Td>
+            <Td>{r.pct_empty}%</Td>
+          </Tr>
         ))}
-      </tbody>
-    </table>
+      </Tbody>
+    </Table>
   );
 }
 
 function ContactCheckSection({ label, result }: { label: string; result: ContactCheck }) {
   return (
-    <div style={{ margin: "1rem 0" }}>
-      <h4 style={{ marginBottom: "0.25rem" }}>{label}</h4>
+    <div className="space-y-2 border-t border-ink-100 py-4 first:border-t-0 first:pt-0">
+      <h4 className="text-sm font-semibold text-ink-900">{label}</h4>
       {result.issues.length === 0 ? (
-        <p style={{ color: "green" }}>✅ OK</p>
+        <p className="flex items-center gap-1.5 text-sm text-emerald-700">
+          <CheckCircle2 className="h-4 w-4" />
+          OK
+        </p>
       ) : (
         <>
-          <p style={{ color: "crimson" }}>❌ {result.issues.length} issue(s)</p>
-          <table style={{ borderCollapse: "collapse", fontSize: "0.85rem", width: "100%" }}>
-            <thead>
-              <tr>
+          <p className="flex items-center gap-1.5 text-sm text-red-700">
+            <XCircle className="h-4 w-4" />
+            {result.issues.length} issue(s)
+          </p>
+          <Table>
+            <Thead>
+              <Tr>
                 {["IDParty", "CompanyName", "Value", "Reason"].map((h) => (
-                  <th key={h} style={{ border: "1px solid #ccc", padding: "3px 8px", textAlign: "left" }}>
-                    {h}
-                  </th>
+                  <Th key={h}>{h}</Th>
                 ))}
-              </tr>
-            </thead>
-            <tbody>
+              </Tr>
+            </Thead>
+            <Tbody>
               {result.issues.slice(0, 50).map((issue, i) => (
-                <tr key={i}>
-                  <td style={{ border: "1px solid #ccc", padding: "3px 8px" }}>{issue.id_party}</td>
-                  <td style={{ border: "1px solid #ccc", padding: "3px 8px" }}>{issue.company_name}</td>
-                  <td style={{ border: "1px solid #ccc", padding: "3px 8px" }}>{issue.invalid_value}</td>
-                  <td style={{ border: "1px solid #ccc", padding: "3px 8px" }}>{issue.reason}</td>
-                </tr>
+                <Tr key={i}>
+                  <Td>{issue.id_party}</Td>
+                  <Td>{issue.company_name}</Td>
+                  <Td>{issue.invalid_value}</Td>
+                  <Td>{issue.reason}</Td>
+                </Tr>
               ))}
-            </tbody>
-          </table>
+            </Tbody>
+          </Table>
         </>
       )}
       <QualityReportTable rows={result.quality_report} />
@@ -191,307 +211,331 @@ export default function QualityPage() {
   }
 
   const tabs: [Tab, string][] = [
-    ["cleanup", "🛠️ DB-Bereinigung"],
-    ["fuzzy", "🧠 Fuzzy"],
-    ["register", "🏛 Register-Nr."],
-    ["communication", "📞 Kommunikation"],
-    ["completeness", "✅ Vollständigkeit"],
-    ["date", "📅 Datum"],
-    ["auftrag", "📋 Aufträge DQ"],
+    ["cleanup", "DB-Bereinigung"],
+    ["fuzzy", "Fuzzy"],
+    ["register", "Register-Nr."],
+    ["communication", "Kommunikation"],
+    ["completeness", "Vollständigkeit"],
+    ["date", "Datum"],
+    ["auftrag", "Aufträge DQ"],
   ];
 
   return (
-    <main style={{ padding: "3rem", maxWidth: 1000, margin: "0 auto" }}>
-      <p>
-        <Link href={`/dashboard/projects/${projectId}`}>← Back to project</Link>
-      </p>
-      <h1>🔍 Quality Analysis</h1>
-      <p style={{ color: "#666" }}>
-        Independent data-quality checks over Mandanten and Aufträge. Each check runs on demand and
-        shows its result below - nothing here is auto-saved to a review queue.
-      </p>
-      <p style={{ color: "#888", fontSize: "0.85rem" }}>
-        Note: the original tool&apos;s &quot;Missing ID&quot; check isn&apos;t ported - IDParty is a
-        required primary key in this system, so a Mandant record with no IDParty cannot exist here.
-      </p>
+    <div className="space-y-6">
+      <Link
+        href={`/dashboard/projects/${projectId}`}
+        className="inline-flex items-center gap-1.5 text-sm font-medium text-ink-500 hover:text-ink-800"
+      >
+        <ArrowLeft className="h-3.5 w-3.5" />
+        Back to project
+      </Link>
 
-      <div style={{ display: "flex", gap: "0.5rem", margin: "1.5rem 0", borderBottom: "1px solid #ddd", flexWrap: "wrap" }}>
-        {tabs.map(([key, label]) => (
-          <button
-            key={key}
-            onClick={() => setTab(key)}
-            style={{
-              padding: "0.5rem 0.8rem",
-              border: "none",
-              borderBottom: tab === key ? "2px solid #333" : "2px solid transparent",
-              background: "transparent",
-              fontWeight: tab === key ? 600 : 400,
-              cursor: "pointer",
-            }}
-          >
-            {label}
-          </button>
-        ))}
+      <div>
+        <h1 className="text-2xl font-semibold text-ink-900">Quality Analysis</h1>
+        <p className="mt-1 text-sm text-ink-500">
+          Independent data-quality checks over Mandanten and Aufträge. Each check runs on demand and
+          shows its result below - nothing here is auto-saved to a review queue.
+        </p>
+        <p className="mt-1 text-xs text-ink-400">
+          Note: the original tool&apos;s &quot;Missing ID&quot; check isn&apos;t ported - IDParty is a
+          required primary key in this system, so a Mandant record with no IDParty cannot exist here.
+        </p>
       </div>
 
-      {error && <p style={{ color: "crimson" }}>{error}</p>}
-      {message && <p style={{ color: "green" }}>{message}</p>}
+      <Tabs
+        items={tabs.map(([key, label]) => ({ key, label }))}
+        active={tab}
+        onChange={(key) => setTab(key as Tab)}
+      />
+
+      {error && <Alert tone="danger">{error}</Alert>}
+      {message && <Alert tone="success">{message}</Alert>}
 
       {tab === "cleanup" && (
-        <>
-          <h3>DB-Bereinigung</h3>
-          <p style={{ color: "#666" }}>Replaces exact-match junk values with empty across every Mandant field.</p>
-          <input
-            value={badValues}
-            onChange={(e) => setBadValues(e.target.value)}
-            style={{ width: "100%", padding: "0.4rem", marginBottom: "0.5rem" }}
-          />
-          <br />
-          <button onClick={handleCleanup} disabled={busy}>
-            🚀 Start Bereinigung
-          </button>
-        </>
+        <Card>
+          <CardHeader>
+            <CardTitle>DB-Bereinigung</CardTitle>
+            <CardDescription>
+              Replaces exact-match junk values with empty across every Mandant field.
+            </CardDescription>
+          </CardHeader>
+          <CardBody className="space-y-3">
+            <Input value={badValues} onChange={(e) => setBadValues(e.target.value)} />
+            <Button onClick={handleCleanup} disabled={busy}>
+              <PlayCircle className="h-4 w-4" />
+              Start Bereinigung
+            </Button>
+          </CardBody>
+        </Card>
       )}
 
       {tab === "fuzzy" && (
-        <>
-          <h3>🧠 Fuzzy Duplicate Check (ML)</h3>
-          <p style={{ color: "#666" }}>TF-IDF + Nearest Neighbors with sub-blocking by country and ZIP prefix.</p>
-          <button onClick={handleFuzzy} disabled={busy}>
-            🚀 Start Fuzzy Analyse
-          </button>
-          {fuzzyResult && (
-            <>
-              <p style={{ marginTop: "1rem" }}>
-                {fuzzyResult.length === 0 ? "✅ No fuzzy duplicates found." : `${fuzzyResult.length} match(es) found (top 500).`}
-              </p>
-              {fuzzyResult.length > 0 && (
-                <div style={{ overflowX: "auto" }}>
-                  <table style={{ borderCollapse: "collapse", fontSize: "0.8rem" }}>
-                    <thead>
-                      <tr>
-                        {["IDParty I", "Name I", "IDParty J", "Name J", "Country", "Similarity", "Category"].map((h) => (
-                          <th key={h} style={{ border: "1px solid #ccc", padding: "3px 8px", textAlign: "left" }}>
-                            {h}
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
+        <Card>
+          <CardHeader>
+            <CardTitle>Fuzzy Duplicate Check (ML)</CardTitle>
+            <CardDescription>
+              TF-IDF + Nearest Neighbors with sub-blocking by country and ZIP prefix.
+            </CardDescription>
+          </CardHeader>
+          <CardBody className="space-y-3">
+            <Button onClick={handleFuzzy} disabled={busy}>
+              <PlayCircle className="h-4 w-4" />
+              Start Fuzzy Analyse
+            </Button>
+            {fuzzyResult && (
+              <>
+                <p className="text-sm text-ink-600">
+                  {fuzzyResult.length === 0
+                    ? "No fuzzy duplicates found."
+                    : `${fuzzyResult.length} match(es) found (top 500).`}
+                </p>
+                {fuzzyResult.length > 0 && (
+                  <Table>
+                    <Thead>
+                      <Tr>
+                        {["IDParty I", "Name I", "IDParty J", "Name J", "Country", "Similarity", "Category"].map(
+                          (h) => (
+                            <Th key={h}>{h}</Th>
+                          ),
+                        )}
+                      </Tr>
+                    </Thead>
+                    <Tbody>
                       {fuzzyResult.slice(0, 50).map((m, i) => (
-                        <tr key={i}>
-                          <td style={{ border: "1px solid #ccc", padding: "3px 8px" }}>{m.id_party_i}</td>
-                          <td style={{ border: "1px solid #ccc", padding: "3px 8px" }}>{m.company_name_i}</td>
-                          <td style={{ border: "1px solid #ccc", padding: "3px 8px" }}>{m.id_party_j}</td>
-                          <td style={{ border: "1px solid #ccc", padding: "3px 8px" }}>{m.company_name_j}</td>
-                          <td style={{ border: "1px solid #ccc", padding: "3px 8px" }}>{m.country_code}</td>
-                          <td style={{ border: "1px solid #ccc", padding: "3px 8px" }}>{m.similarity_pct}%</td>
-                          <td style={{ border: "1px solid #ccc", padding: "3px 8px" }}>{m.category}</td>
-                        </tr>
+                        <Tr key={i}>
+                          <Td>{m.id_party_i}</Td>
+                          <Td>{m.company_name_i}</Td>
+                          <Td>{m.id_party_j}</Td>
+                          <Td>{m.company_name_j}</Td>
+                          <Td>{m.country_code}</Td>
+                          <Td>{m.similarity_pct}%</Td>
+                          <Td>{m.category}</Td>
+                        </Tr>
                       ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </>
-          )}
-        </>
+                    </Tbody>
+                  </Table>
+                )}
+              </>
+            )}
+          </CardBody>
+        </Card>
       )}
 
       {tab === "register" && (
-        <>
-          <h3>🏛 Register Number Analysis</h3>
-          <p style={{ color: "#666" }}>
-            Checks Handelsregisternummern for placeholders, missing digits, dummy sequences, and
-            court/context text. Standardization lives on RegisterNumber Cleansing.
-          </p>
-          <button onClick={handleRegister} disabled={busy}>
-            🚀 Start RegisterNumber Check
-          </button>
-          {registerResult && (
-            <>
-              <p style={{ marginTop: "1rem" }}>
-                {registerResult.junk.length === 0
-                  ? "✅ All register numbers look clean."
-                  : `❌ ${registerResult.junk.length} problematic register number(s).`}
-              </p>
-              {registerResult.junk.length > 0 && (
-                <table style={{ borderCollapse: "collapse", fontSize: "0.85rem", width: "100%" }}>
-                  <thead>
-                    <tr>
-                      {["IDParty", "CompanyName", "RegisterNumber", "Reason"].map((h) => (
-                        <th key={h} style={{ border: "1px solid #ccc", padding: "3px 8px", textAlign: "left" }}>
-                          {h}
-                        </th>
+        <Card>
+          <CardHeader>
+            <CardTitle>Register Number Analysis</CardTitle>
+            <CardDescription>
+              Checks Handelsregisternummern for placeholders, missing digits, dummy sequences, and
+              court/context text. Standardization lives on RegisterNumber Cleansing.
+            </CardDescription>
+          </CardHeader>
+          <CardBody className="space-y-3">
+            <Button onClick={handleRegister} disabled={busy}>
+              <PlayCircle className="h-4 w-4" />
+              Start RegisterNumber Check
+            </Button>
+            {registerResult && (
+              <>
+                <p className="text-sm text-ink-600">
+                  {registerResult.junk.length === 0
+                    ? "All register numbers look clean."
+                    : `${registerResult.junk.length} problematic register number(s).`}
+                </p>
+                {registerResult.junk.length > 0 && (
+                  <Table>
+                    <Thead>
+                      <Tr>
+                        {["IDParty", "CompanyName", "RegisterNumber", "Reason"].map((h) => (
+                          <Th key={h}>{h}</Th>
+                        ))}
+                      </Tr>
+                    </Thead>
+                    <Tbody>
+                      {registerResult.junk.slice(0, 50).map((r) => (
+                        <Tr key={r.id_party}>
+                          <Td>{r.id_party}</Td>
+                          <Td>{r.company_name}</Td>
+                          <Td>{r.register_number}</Td>
+                          <Td>{r.reason}</Td>
+                        </Tr>
                       ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {registerResult.junk.slice(0, 50).map((r) => (
-                      <tr key={r.id_party}>
-                        <td style={{ border: "1px solid #ccc", padding: "3px 8px" }}>{r.id_party}</td>
-                        <td style={{ border: "1px solid #ccc", padding: "3px 8px" }}>{r.company_name}</td>
-                        <td style={{ border: "1px solid #ccc", padding: "3px 8px" }}>{r.register_number}</td>
-                        <td style={{ border: "1px solid #ccc", padding: "3px 8px" }}>{r.reason}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-              <QualityReportTable rows={registerResult.quality_report} />
-            </>
-          )}
-        </>
+                    </Tbody>
+                  </Table>
+                )}
+                <QualityReportTable rows={registerResult.quality_report} />
+              </>
+            )}
+          </CardBody>
+        </Card>
       )}
 
       {tab === "communication" && (
-        <>
-          <h3>📞 Communication Analysis</h3>
-          <p style={{ color: "#666" }}>Email · Website · Telefon · Fax</p>
-          <button onClick={handleCommunication} disabled={busy}>
-            🚀 Start Communication Analysis
-          </button>
-          {commResult && (
-            <>
-              <ContactCheckSection label="1. Email" result={commResult.email} />
-              <ContactCheckSection label="2. Website" result={commResult.website} />
-              <ContactCheckSection label="3. Telefon" result={commResult.phone} />
-              <ContactCheckSection label="4. Fax" result={commResult.fax} />
-            </>
-          )}
-        </>
+        <Card>
+          <CardHeader>
+            <CardTitle>Communication Analysis</CardTitle>
+            <CardDescription>Email · Website · Telefon · Fax</CardDescription>
+          </CardHeader>
+          <CardBody className="space-y-3">
+            <Button onClick={handleCommunication} disabled={busy}>
+              <PlayCircle className="h-4 w-4" />
+              Start Communication Analysis
+            </Button>
+            {commResult && (
+              <div>
+                <ContactCheckSection label="1. Email" result={commResult.email} />
+                <ContactCheckSection label="2. Website" result={commResult.website} />
+                <ContactCheckSection label="3. Telefon" result={commResult.phone} />
+                <ContactCheckSection label="4. Fax" result={commResult.fax} />
+              </div>
+            )}
+          </CardBody>
+        </Card>
       )}
 
       {tab === "completeness" && (
-        <>
-          <h3>✅ Vollständigkeits-Prüfung</h3>
-          <p style={{ color: "#666" }}>Fill rate per attribute, split by Organisation and Natürliche Person.</p>
-          <button onClick={handleCompleteness} disabled={busy}>
-            🚀 Start Check
-          </button>
-          {completenessResult && (
-            <div style={{ overflowX: "auto", marginTop: "1rem" }}>
-              <table style={{ borderCollapse: "collapse", fontSize: "0.8rem" }}>
-                <thead>
-                  <tr>
+        <Card>
+          <CardHeader>
+            <CardTitle>Vollständigkeits-Prüfung</CardTitle>
+            <CardDescription>
+              Fill rate per attribute, split by Organisation and Natürliche Person.
+            </CardDescription>
+          </CardHeader>
+          <CardBody className="space-y-3">
+            <Button onClick={handleCompleteness} disabled={busy}>
+              <PlayCircle className="h-4 w-4" />
+              Start Check
+            </Button>
+            {completenessResult && (
+              <Table>
+                <Thead>
+                  <Tr>
                     {["Typ", "Attribut", "Check-Type", "Total", "Relevant", "%"].map((h) => (
-                      <th key={h} style={{ border: "1px solid #ccc", padding: "3px 8px", textAlign: "left" }}>
-                        {h}
-                      </th>
+                      <Th key={h}>{h}</Th>
                     ))}
-                  </tr>
-                </thead>
-                <tbody>
+                  </Tr>
+                </Thead>
+                <Tbody>
                   {completenessResult.map((r, i) => (
-                    <tr key={i}>
-                      <td style={{ border: "1px solid #ccc", padding: "3px 8px" }}>{r.type}</td>
-                      <td style={{ border: "1px solid #ccc", padding: "3px 8px" }}>{r.attribute}</td>
-                      <td style={{ border: "1px solid #ccc", padding: "3px 8px" }}>{r.check_type}</td>
-                      <td style={{ border: "1px solid #ccc", padding: "3px 8px" }}>{r.total_rows}</td>
-                      <td style={{ border: "1px solid #ccc", padding: "3px 8px" }}>{r.count_relevant}</td>
-                      <td style={{ border: "1px solid #ccc", padding: "3px 8px" }}>{r.pct ?? "n/a"}</td>
-                    </tr>
+                    <Tr key={i}>
+                      <Td>{r.type}</Td>
+                      <Td>{r.attribute}</Td>
+                      <Td>{r.check_type}</Td>
+                      <Td>{r.total_rows}</Td>
+                      <Td>{r.count_relevant}</Td>
+                      <Td>{r.pct ?? "n/a"}</Td>
+                    </Tr>
                   ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </>
+                </Tbody>
+              </Table>
+            )}
+          </CardBody>
+        </Card>
       )}
 
       {tab === "date" && (
-        <>
-          <h3>📅 Datums-Standardisierung</h3>
-          <p style={{ color: "#666" }}>
-            Target format: YYYY-MM-DD. Unlike the other checks on this page, this one writes the
-            standardized values back to Mandanten directly.
-          </p>
-          <button onClick={handleDate} disabled={busy}>
-            🚀 Start Datums-Standardisierung
-          </button>
-          {dateResult && (
-            <>
-              <p style={{ marginTop: "1rem" }}>✅ {dateResult.updated} field(s) standardized.</p>
-              {dateResult.preview.length > 0 && (
-                <table style={{ borderCollapse: "collapse", fontSize: "0.85rem" }}>
-                  <thead>
-                    <tr>
-                      {["IDParty", "CompanyName", "Changes"].map((h) => (
-                        <th key={h} style={{ border: "1px solid #ccc", padding: "3px 8px", textAlign: "left" }}>
-                          {h}
-                        </th>
+        <Card>
+          <CardHeader>
+            <CardTitle>Datums-Standardisierung</CardTitle>
+            <CardDescription>
+              Target format: YYYY-MM-DD. Unlike the other checks on this page, this one writes the
+              standardized values back to Mandanten directly.
+            </CardDescription>
+          </CardHeader>
+          <CardBody className="space-y-3">
+            <Button onClick={handleDate} disabled={busy}>
+              <PlayCircle className="h-4 w-4" />
+              Start Datums-Standardisierung
+            </Button>
+            {dateResult && (
+              <>
+                <p className="flex items-center gap-1.5 text-sm text-emerald-700">
+                  <CheckCircle2 className="h-4 w-4" />
+                  {dateResult.updated} field(s) standardized.
+                </p>
+                {dateResult.preview.length > 0 && (
+                  <Table>
+                    <Thead>
+                      <Tr>
+                        {["IDParty", "CompanyName", "Changes"].map((h) => (
+                          <Th key={h}>{h}</Th>
+                        ))}
+                      </Tr>
+                    </Thead>
+                    <Tbody>
+                      {dateResult.preview.slice(0, 20).map((r) => (
+                        <Tr key={r.id_party}>
+                          <Td>{r.id_party}</Td>
+                          <Td>{r.company_name}</Td>
+                          <Td>
+                            {Object.entries(r.changes)
+                              .map(([field, c]) => `${field}: ${c.old ?? ""} → ${c.new}`)
+                              .join("; ")}
+                          </Td>
+                        </Tr>
                       ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {dateResult.preview.slice(0, 20).map((r) => (
-                      <tr key={r.id_party}>
-                        <td style={{ border: "1px solid #ccc", padding: "3px 8px" }}>{r.id_party}</td>
-                        <td style={{ border: "1px solid #ccc", padding: "3px 8px" }}>{r.company_name}</td>
-                        <td style={{ border: "1px solid #ccc", padding: "3px 8px" }}>
-                          {Object.entries(r.changes)
-                            .map(([field, c]) => `${field}: ${c.old ?? ""} → ${c.new}`)
-                            .join("; ")}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </>
-          )}
-        </>
+                    </Tbody>
+                  </Table>
+                )}
+              </>
+            )}
+          </CardBody>
+        </Card>
       )}
 
       {tab === "auftrag" && (
-        <>
-          <h3>🔑 ID-Project Check</h3>
-          <p style={{ color: "#666" }}>
-            Shows every row where the same (IDParty · ProjectName · AddedDate) has more than one
-            distinct ServiceName.
-          </p>
-          <button onClick={handleAuftrag} disabled={busy}>
-            🚀 Start ID-Project Check
-          </button>
-          {auftragResult && (
-            <>
-              <p style={{ marginTop: "1rem" }}>
-                {auftragResult.length === 0
-                  ? "✅ No conflicts found."
-                  : `❌ ${auftragResult.length} conflicting row(s).`}
-              </p>
-              {auftragResult.length > 0 && (
-                <table style={{ borderCollapse: "collapse", fontSize: "0.85rem", width: "100%" }}>
-                  <thead>
-                    <tr>
-                      {["IDParty", "ProjectName", "AddedDate", "ServiceName"].map((h) => (
-                        <th key={h} style={{ border: "1px solid #ccc", padding: "3px 8px", textAlign: "left" }}>
-                          {h}
-                        </th>
+        <Card>
+          <CardHeader>
+            <CardTitle>ID-Project Check</CardTitle>
+            <CardDescription>
+              Shows every row where the same (IDParty · ProjectName · AddedDate) has more than one
+              distinct ServiceName.
+            </CardDescription>
+          </CardHeader>
+          <CardBody className="space-y-3">
+            <Button onClick={handleAuftrag} disabled={busy}>
+              <PlayCircle className="h-4 w-4" />
+              Start ID-Project Check
+            </Button>
+            {auftragResult && (
+              <>
+                <p className="text-sm text-ink-600">
+                  {auftragResult.length === 0
+                    ? "No conflicts found."
+                    : `${auftragResult.length} conflicting row(s).`}
+                </p>
+                {auftragResult.length > 0 && (
+                  <Table>
+                    <Thead>
+                      <Tr>
+                        {["IDParty", "ProjectName", "AddedDate", "ServiceName"].map((h) => (
+                          <Th key={h}>{h}</Th>
+                        ))}
+                      </Tr>
+                    </Thead>
+                    <Tbody>
+                      {auftragResult.map((r, i) => (
+                        <Tr key={i}>
+                          <Td>{r.id_party}</Td>
+                          <Td>{r.project_name}</Td>
+                          <Td>{r.added_date}</Td>
+                          <Td>{r.service_name}</Td>
+                        </Tr>
                       ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {auftragResult.map((r, i) => (
-                      <tr key={i}>
-                        <td style={{ border: "1px solid #ccc", padding: "3px 8px" }}>{r.id_party}</td>
-                        <td style={{ border: "1px solid #ccc", padding: "3px 8px" }}>{r.project_name}</td>
-                        <td style={{ border: "1px solid #ccc", padding: "3px 8px" }}>{r.added_date}</td>
-                        <td style={{ border: "1px solid #ccc", padding: "3px 8px" }}>{r.service_name}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </>
-          )}
-        </>
+                    </Tbody>
+                  </Table>
+                )}
+              </>
+            )}
+          </CardBody>
+        </Card>
       )}
 
-      <hr style={{ margin: "2.5rem 0" }} />
-      <button onClick={handleMarkDone} disabled={busy}>
-        Mark this stage as done
-      </button>
-    </main>
+      <div className="flex justify-end border-t border-ink-200 pt-6">
+        <Button variant="secondary" onClick={handleMarkDone} disabled={busy}>
+          Mark this stage as done
+        </Button>
+      </div>
+    </div>
   );
 }

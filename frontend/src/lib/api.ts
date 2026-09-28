@@ -99,6 +99,52 @@ export function getProject(token: string, projectId: string): Promise<Project> {
   return apiFetch<Project>(`/projects/${projectId}`, token);
 }
 
+export function renameProject(token: string, projectId: string, name: string): Promise<Project> {
+  return apiFetch<Project>(`/projects/${projectId}`, token, {
+    method: "PATCH",
+    body: JSON.stringify({ name }),
+  });
+}
+
+export async function deleteProject(token: string, projectId: string): Promise<void> {
+  const response = await fetch(`${API_URL}/projects/${projectId}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${token}` },
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    const body = await response.text();
+    throw new ApiError(response.status, `API /projects/${projectId} failed: ${response.status} ${body}`);
+  }
+}
+
+export type ReportSummary = {
+  mandant_count: number;
+  auftrag_count: number;
+  ghost_count: number;
+  open_findings: {
+    junk_address: number;
+    address_decomposition: number;
+    register_cleansing: number;
+  };
+};
+
+export function getReportSummary(token: string, projectId: string): Promise<ReportSummary> {
+  return apiFetch<ReportSummary>(`/projects/${projectId}/report/summary`, token);
+}
+
+export async function downloadMandantenCsv(token: string, projectId: string): Promise<Blob> {
+  const response = await fetch(`${API_URL}/projects/${projectId}/report/export/mandanten.csv`, {
+    headers: { Authorization: `Bearer ${token}` },
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    const body = await response.text();
+    throw new ApiError(response.status, `Export failed: ${response.status} ${body}`);
+  }
+  return response.blob();
+}
+
 export type LoadSummary = {
   row_count: number;
   columns: string[];

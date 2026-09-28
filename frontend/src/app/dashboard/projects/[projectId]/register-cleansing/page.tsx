@@ -4,6 +4,7 @@ import { useAuth } from "@clerk/nextjs";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { ArrowLeft, Check, CheckCircle2, Landmark, PlayCircle } from "lucide-react";
 import {
   acceptRegisterCleansing,
   listRegisterCleansingProposals,
@@ -12,13 +13,18 @@ import {
   type RegisterCleansingProposal,
   type RegisterCleansingSummary,
 } from "@/lib/api";
-
-const cell: React.CSSProperties = { border: "1px solid #ccc", padding: "4px 8px", fontSize: "0.8rem" };
+import { Alert, Badge, Button, Card, CardBody, CardHeader, CardTitle, EmptyState, Table, Tbody, Td, Th, Thead, Tr } from "@/components/ui";
 
 const CONFIDENCE_LABEL: Record<string, string> = {
-  HIGH: "🟢 High",
-  MEDIUM: "🟡 Medium",
-  LOW: "🔴 Low",
+  HIGH: "High",
+  MEDIUM: "Medium",
+  LOW: "Low",
+};
+
+const CONFIDENCE_TONE: Record<string, "success" | "warning" | "danger"> = {
+  HIGH: "success",
+  MEDIUM: "warning",
+  LOW: "danger",
 };
 
 export default function RegisterCleansingPage() {
@@ -100,86 +106,127 @@ export default function RegisterCleansingPage() {
   }
 
   return (
-    <main style={{ padding: "3rem", maxWidth: 1100, margin: "0 auto" }}>
-      <p>
-        <Link href={`/dashboard/projects/${projectId}`}>← Back to project</Link>
-      </p>
-      <h1>🏛 RegisterNumber Cleansing</h1>
-      <p style={{ color: "#666" }}>
-        Standardizes Mandant.RegisterNumber in two stages: deterministic prefix/whitespace
-        normalization (&quot;HRB3792&quot; → &quot;HRB 3792&quot;), then a Claude Haiku pass for
-        special forms (legacy &quot;HRN&quot; prefix, embedded court text) the deterministic
-        pass can&apos;t handle. Junk values (checked by Quality Analysis&apos;s Register-Nr.
-        check) are excluded - this stage never invents a number for a value that isn&apos;t one.
-        Changes are proposals only; review and explicitly accept below.
-      </p>
+    <div className="space-y-6">
+      <Link
+        href={`/dashboard/projects/${projectId}`}
+        className="inline-flex items-center gap-1.5 text-sm font-medium text-ink-500 hover:text-ink-800"
+      >
+        <ArrowLeft className="h-3.5 w-3.5" />
+        Back to project
+      </Link>
 
-      {error && <p style={{ color: "crimson" }}>{error}</p>}
-      {message && <p style={{ color: "green" }}>{message}</p>}
-
-      <div style={{ display: "flex", gap: "1rem", alignItems: "center", marginBottom: "1rem" }}>
-        <label>
-          <input type="checkbox" checked={useLlm} onChange={(e) => setUseLlm(e.target.checked)} /> Use Claude Haiku
-          for special forms
-        </label>
-        <button onClick={handleRun} disabled={running}>
-          {running ? "Running…" : "🚀 Run Cleansing"}
-        </button>
-      </div>
-
-      {summary && (
-        <p style={{ color: "#444" }}>
-          {summary.filled} filled value(s) · {summary.junk} junk (unchanged, see Quality) ·{" "}
-          {summary.canonical} already canonical · {summary.std} standardized · {summary.llm_candidates}{" "}
-          LLM candidate(s), {summary.llm_done} resolved
+      <div>
+        <h1 className="flex items-center gap-2 text-2xl font-semibold text-ink-900">
+          <Landmark className="h-6 w-6 text-brand-600" />
+          RegisterNumber Cleansing
+        </h1>
+        <p className="mt-1 text-sm text-ink-500">
+          Standardizes Mandant.RegisterNumber in two stages: deterministic prefix/whitespace
+          normalization (&quot;HRB3792&quot; → &quot;HRB 3792&quot;), then a Claude Haiku pass for
+          special forms (legacy &quot;HRN&quot; prefix, embedded court text) the deterministic
+          pass can&apos;t handle. Junk values (checked by Quality Analysis&apos;s Register-Nr.
+          check) are excluded - this stage never invents a number for a value that isn&apos;t one.
+          Changes are proposals only; review and explicitly accept below.
         </p>
-      )}
-
-      <div style={{ display: "flex", gap: "1rem", alignItems: "center", margin: "1rem 0" }}>
-        <button onClick={() => handleAccept(["HIGH"])} disabled={accepting !== null}>
-          {accepting === "HIGH" ? "…" : "Accept all High"}
-        </button>
-        <button onClick={() => handleAccept(["HIGH", "MEDIUM"])} disabled={accepting !== null}>
-          {accepting === "HIGH,MEDIUM" ? "…" : "Accept High + Medium"}
-        </button>
       </div>
 
-      <h2>Proposals ({proposals.length})</h2>
-      {proposals.length === 0 && <p>No open proposals - run Cleansing above.</p>}
-      {proposals.length > 0 && (
-        <div style={{ overflowX: "auto" }}>
-          <table style={{ borderCollapse: "collapse", width: "100%" }}>
-            <thead>
-              <tr>
-                {["IDParty", "Company", "Country", "Alt", "Neu", "Stufe", "Confidence", "Begruendung"].map((h) => (
-                  <th key={h} style={cell}>
-                    {h}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {proposals.slice(0, 200).map((p) => (
-                <tr key={p.id}>
-                  <td style={cell}>{p.IDParty}</td>
-                  <td style={cell}>{p.CompanyName}</td>
-                  <td style={cell}>{p.CountryCode}</td>
-                  <td style={cell}>{p.RegisterNumber_Alt}</td>
-                  <td style={cell}>{p.RegisterNumber_Neu}</td>
-                  <td style={cell}>{p.Stufe}</td>
-                  <td style={cell}>{CONFIDENCE_LABEL[p.Confidence]}</td>
-                  <td style={cell}>{p.Begruendung}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+      {error && <Alert tone="danger">{error}</Alert>}
+      {message && <Alert tone="success">{message}</Alert>}
 
-      <hr style={{ margin: "2.5rem 0" }} />
-      <button onClick={handleMarkDone} disabled={busy}>
-        Mark this stage as done
-      </button>
-    </main>
+      <Card>
+        <CardBody className="space-y-4">
+          <div className="flex flex-wrap items-center gap-4">
+            <label className="flex items-center gap-2 text-sm text-ink-700">
+              <input
+                type="checkbox"
+                checked={useLlm}
+                onChange={(e) => setUseLlm(e.target.checked)}
+                className="h-4 w-4 rounded border-ink-300 text-brand-600 focus:ring-brand-500/40"
+              />
+              Use Claude Haiku for special forms
+            </label>
+            <Button onClick={handleRun} disabled={running}>
+              <PlayCircle className="h-4 w-4" />
+              {running ? "Running…" : "Run Cleansing"}
+            </Button>
+          </div>
+
+          {summary && (
+            <p className="text-sm text-ink-600">
+              {summary.filled} filled value(s) · {summary.junk} junk (unchanged, see Quality) ·{" "}
+              {summary.canonical} already canonical · {summary.std} standardized · {summary.llm_candidates}{" "}
+              LLM candidate(s), {summary.llm_done} resolved
+            </p>
+          )}
+
+          <div className="flex flex-wrap items-center gap-3 border-t border-ink-100 pt-4">
+            <Button variant="secondary" size="sm" onClick={() => handleAccept(["HIGH"])} disabled={accepting !== null}>
+              <Check className="h-3.5 w-3.5" />
+              {accepting === "HIGH" ? "…" : "Accept all High"}
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => handleAccept(["HIGH", "MEDIUM"])}
+              disabled={accepting !== null}
+            >
+              <Check className="h-3.5 w-3.5" />
+              {accepting === "HIGH,MEDIUM" ? "…" : "Accept High + Medium"}
+            </Button>
+          </div>
+        </CardBody>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Proposals ({proposals.length})</CardTitle>
+        </CardHeader>
+        <CardBody>
+          {proposals.length === 0 ? (
+            <EmptyState title="No open proposals" description="Run Cleansing above to generate proposals." />
+          ) : (
+            <Table>
+              <Thead>
+                <Tr>
+                  <Th>IDParty</Th>
+                  <Th>Company</Th>
+                  <Th>Country</Th>
+                  <Th>Alt</Th>
+                  <Th>Neu</Th>
+                  <Th>Stufe</Th>
+                  <Th>Confidence</Th>
+                  <Th>Begruendung</Th>
+                </Tr>
+              </Thead>
+              <Tbody>
+                {proposals.slice(0, 200).map((p) => (
+                  <Tr key={p.id}>
+                    <Td>{p.IDParty}</Td>
+                    <Td>{p.CompanyName}</Td>
+                    <Td>{p.CountryCode}</Td>
+                    <Td>{p.RegisterNumber_Alt}</Td>
+                    <Td>{p.RegisterNumber_Neu}</Td>
+                    <Td>{p.Stufe}</Td>
+                    <Td>
+                      <Badge tone={CONFIDENCE_TONE[p.Confidence] ?? "neutral"}>
+                        {CONFIDENCE_LABEL[p.Confidence] ?? p.Confidence}
+                      </Badge>
+                    </Td>
+                    <Td>{p.Begruendung}</Td>
+                  </Tr>
+                ))}
+              </Tbody>
+            </Table>
+          )}
+        </CardBody>
+      </Card>
+
+      <div>
+        <Button onClick={handleMarkDone} disabled={busy}>
+          <CheckCircle2 className="h-4 w-4" />
+          Mark this stage as done
+        </Button>
+      </div>
+    </div>
   );
 }
