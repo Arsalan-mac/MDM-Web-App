@@ -4,9 +4,9 @@ import { useAuth } from "@clerk/nextjs";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
-import { ArrowLeft, MessageCircle } from "lucide-react";
+import { ArrowLeft, ArrowRight, Database, MessageCircle } from "lucide-react";
 import { getProject, type Project } from "@/lib/api";
-import { Alert, Badge, ProgressBar } from "@/components/ui";
+import { Alert, Badge, Card, CardBody, ProgressBar } from "@/components/ui";
 import { PipelineStepper } from "@/components/PipelineStepper";
 
 export default function ProjectDetailPage() {
@@ -67,7 +67,30 @@ export default function ProjectDetailPage() {
             </Link>
           </div>
 
-          <PipelineStepper projectId={projectId} stages={project.stages} />
+          <Link href={`/dashboard/projects/${projectId}/datasets`}>
+            <Card className="transition-all hover:border-brand-300 hover:shadow-md hover:shadow-ink-900/5">
+              <CardBody className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-brand-100 text-brand-700">
+                    <Database className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <p className="font-semibold text-ink-900">Datasets &amp; Checks</p>
+                    <p className="text-sm text-ink-500">
+                      Upload any file, any data model. Map columns once, then run any checks you pick —
+                      no fixed order.
+                    </p>
+                  </div>
+                </div>
+                <ArrowRight className="h-4 w-4 shrink-0 text-ink-300" />
+              </CardBody>
+            </Card>
+          </Link>
+
+          <div>
+            <p className="mb-3 text-sm font-semibold text-ink-700">SAP Migration Pipeline (preset)</p>
+            <PipelineStepper projectId={projectId} stages={project.stages} />
+          </div>
         </>
       )}
     </div>

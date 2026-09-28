@@ -645,6 +645,89 @@ Template Migration, RegisterNumber Cleansing, Delete Records.
     only), with a regression test (`tests/test_report.py`) asserting the
     mapping and a real `getattr` round-trip on every typed column.
 
+- 1f. Generic Check Catalog: any data model, not just Mandanten. The whole
+  app through 1e assumed one fixed ~60-column Mandanten schema and one
+  locked 11-stage pipeline - fine for the one SAP migration this was built
+  around, wrong for "any data model, SAP or not" as a product. Adds a
+  schema-agnostic layer underneath the existing pipeline (kept as-is, see
+  below) rather than replacing it:
+  - **`Dataset`/`DatasetRow`** (`app/models/dataset.py`): any uploaded file
+    becomes a dataset with whatever columns it actually has (JSONB rows,
+    no fixed schema). Reuses `harmonize_reference_dataframe` (not
+    `harmonize_dataframe` - the latter renames columns via Mandanten's
+    alias table, wrong here) for parsing/cleaning, same as the reference-
+    table uploads already did.
+  - **Check Catalog** (`app/checks/`): a `CheckDefinition` registry where
+    each check declares the semantic *roles* it needs (e.g. "email",
+    "address") rather than a fixed column name; a dataset's own
+    `role_mapping` (role -> real column, or role -> list[column] for
+    checks like duplicate detection that match across several fields) is
+    how a check finds its data. The user picks any subset of checks to
+    run, in any order, re-runnable anytime - no stage locking.
+  - Seven built-in checks adapt existing, already-tested logic rather
+    than reimplementing it: address format and register-number format
+    wrap the pure functions `check_addresses`/`register_number_issues`
+    directly; email/website/phone/completeness are small new generic
+    implementations (their Quality Analysis equivalents are tightly
+    coupled to `Mandant` ORM objects, not reusable as-is); duplicate
+    detection generalizes Quality Analysis's TF-IDF/nearest-neighbor
+    approach to run over user-mapped "match fields" instead of a fixed
+    CompanyName/Address/City/ZipCode combination. Tax Cleansing, SAP-CARP,
+    SAP Template Migration and RegisterNumber Cleansing are genuinely
+    stateful multi-step features (editable rule tables, propose/accept
+    workflows with persistent config) - deliberately *not* migrated into
+    the Check Catalog's simpler "stateless check over rows" shape; they
+    stay as their own dedicated pages, reachable from the pipeline stepper
+    same as before.
+  - **`CheckFinding`**: one generic finding table (`check_key`, `field`,
+    `severity`, `message`, `proposed_value`, `status`) replacing the
+    pattern of one bespoke table per check. Accepting a finding writes its
+    `proposed_value` into the row's JSONB `data`, same
+    propose-then-explicit-accept shape as `JunkAddress`/
+    `AddressDecompositionResult`.
+  - Frontend: a new "Datasets & Checks" entry point on the project page,
+    separate from (and explicitly labeled apart from) the "SAP Migration
+    Pipeline (preset)" stepper - upload page, and a dataset detail page
+    (column preview, a role-mapping editor built from every check's
+    declared roles, a check-selector checklist that greys out a check
+    until its required roles are mapped, and a findings table with
+    accept/dismiss).
+  - **Bug fixed while building this**: a tenant schema provisioned before
+    some table existed in the model (any tenant created before this
+    session, for `Dataset`/`DatasetRow`/`CheckFinding`) would never get
+    that table - `create_tenant_schema` only ran `TenantBase.metadata.
+    create_all()` once, at provisioning time. Fixed with
+    `ensure_tenant_schema_current` (`app/db/tenancy.py`), called from
+    `get_tenant_db` on every request but only actually touching the
+    database once per schema per process (an in-memory set) - closes the
+    gap for this and every future tenant-scoped table addition, not just
+    this one.
+  - Verified with 14 unit tests (`tests/test_checks.py`, deliberately
+    using non-SAP column names like `reg_no`/`street_addr` throughout to
+    prove no check assumes a fixed schema) and a live end-to-end run
+    against a genuinely non-SAP "Employees" dataset (`FullName`,
+    `Corp_Email`, `Cell_Phone`, `Biz_Reg_No`, `HQ_Address`, `HQ_City`,
+    `HQ_Country` - none of Mandanten's field names) covering all seven
+    checks plus the full propose -> accept -> row-mutation cycle.
+  - Known gap: no delete-dataset endpoint yet (upload/list/detail/role-
+    mapping/run/findings only). Deferred to when it's actually needed
+    rather than built speculatively.
+
+## Phase 2 — Mapping/Transform Studio (planned, not started)
+
+A `MappingRule` model (target_field, rule_type: direct/concat/split/
+conditional/constant/formula/ai_prompt, params JSON) plus a generic
+transform engine that executes those rules against a Dataset to produce an
+output table - replacing 1e's SAP Template Migration's hardcoded per-field
+Python (`sap_template_mappings.py`) with a re-expression of the same
+BUT000-General/ADRC field specs as a built-in preset ruleset once this
+exists, proving the engine on real, already-correct logic. Two ways to
+edit a MappingRule: a visual mapping UI, and an AI chat (extending the
+existing chat-agent tool pattern) that reads/writes MappingRule entries
+directly - so "combine FirstName+LastName into Name1" or "split Address
+into Street/HouseNumber" become conversational edits to structured rules,
+not new hardcoded Python.
+
 ## Phase 3 — Productionization
 
 Azure deployment (Container Apps, Azure DB for PostgreSQL, Azure Cache for

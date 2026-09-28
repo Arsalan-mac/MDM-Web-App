@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import AuthenticatedUser, get_current_user
 from app.db.session import get_public_session
-from app.db.tenancy import get_tenant_sessionmaker, schema_name_for_tenant
+from app.db.tenancy import ensure_tenant_schema_current, get_tenant_sessionmaker, schema_name_for_tenant
 from app.models.public import Tenant
 
 
@@ -37,6 +37,7 @@ async def get_tenant_db(tenant: Tenant = Depends(get_current_tenant)) -> AsyncIt
     schema_translate_map - see app/db/tenancy.py.
     """
     schema_name = schema_name_for_tenant(tenant.slug)
+    await ensure_tenant_schema_current(schema_name)
     sessionmaker = get_tenant_sessionmaker(schema_name)
     async with sessionmaker() as session:
         yield session

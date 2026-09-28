@@ -939,3 +939,129 @@ export function clearRowsByIds(
   formData.append("file", file);
   return apiUpload(`/projects/${projectId}/delete-records/clear-by-ids`, token, formData);
 }
+
+// ── Datasets & Check Catalog (generic, schema-agnostic engine) ──────────
+
+export type Dataset = {
+  id: string;
+  name: string;
+  source_filename: string | null;
+  columns: string[];
+  primary_key_column: string | null;
+  role_mapping: Record<string, string | string[]>;
+  row_count: number;
+};
+
+export type DatasetDetail = Dataset & {
+  sample_rows: Record<string, string | null>[];
+};
+
+export function listDatasets(token: string, projectId: string): Promise<Dataset[]> {
+  return apiFetch<Dataset[]>(`/projects/${projectId}/datasets`, token);
+}
+
+export function getDataset(token: string, projectId: string, datasetId: string): Promise<DatasetDetail> {
+  return apiFetch<DatasetDetail>(`/projects/${projectId}/datasets/${datasetId}`, token);
+}
+
+export function uploadDataset(
+  token: string,
+  projectId: string,
+  file: File,
+  name: string,
+  primaryKeyColumn?: string,
+): Promise<Dataset> {
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("name", name);
+  if (primaryKeyColumn) formData.append("primary_key_column", primaryKeyColumn);
+  return apiUpload(`/projects/${projectId}/datasets/upload`, token, formData);
+}
+
+export function updateRoleMapping(
+  token: string,
+  projectId: string,
+  datasetId: string,
+  roleMapping: Record<string, string | string[]>,
+): Promise<Dataset> {
+  return apiFetch<Dataset>(`/projects/${projectId}/datasets/${datasetId}/role-mapping`, token, {
+    method: "PUT",
+    body: JSON.stringify({ role_mapping: roleMapping }),
+  });
+}
+
+export type CheckDefinition = {
+  key: string;
+  label: string;
+  description: string;
+  required_roles: string[];
+  optional_roles: string[];
+  missing_roles: string[];
+};
+
+export function listAvailableChecks(
+  token: string,
+  projectId: string,
+  datasetId: string,
+): Promise<CheckDefinition[]> {
+  return apiFetch<CheckDefinition[]>(`/projects/${projectId}/datasets/${datasetId}/checks`, token);
+}
+
+export function runChecks(
+  token: string,
+  projectId: string,
+  datasetId: string,
+  checkKeys: string[],
+): Promise<{ finding_counts: Record<string, number> }> {
+  return apiFetch(`/projects/${projectId}/datasets/${datasetId}/checks/run`, token, {
+    method: "POST",
+    body: JSON.stringify({ check_keys: checkKeys }),
+  });
+}
+
+export type CheckFinding = {
+  id: string;
+  row_key: string;
+  check_key: string;
+  field: string;
+  severity: "error" | "warning" | "info";
+  message: string;
+  proposed_value: string | null;
+  status: "open" | "accepted" | "dismissed";
+};
+
+export function listFindings(
+  token: string,
+  projectId: string,
+  datasetId: string,
+  checkKey?: string,
+): Promise<CheckFinding[]> {
+  const q = checkKey ? `?check_key=${encodeURIComponent(checkKey)}` : "";
+  return apiFetch<CheckFinding[]>(`/projects/${projectId}/datasets/${datasetId}/findings${q}`, token);
+}
+
+export function acceptFinding(
+  token: string,
+  projectId: string,
+  datasetId: string,
+  findingId: string,
+): Promise<CheckFinding> {
+  return apiFetch<CheckFinding>(
+    `/projects/${projectId}/datasets/${datasetId}/findings/${findingId}/accept`,
+    token,
+    { method: "POST" },
+  );
+}
+
+export function dismissFinding(
+  token: string,
+  projectId: string,
+  datasetId: string,
+  findingId: string,
+): Promise<CheckFinding> {
+  return apiFetch<CheckFinding>(
+    `/projects/${projectId}/datasets/${datasetId}/findings/${findingId}/dismiss`,
+    token,
+    { method: "POST" },
+  );
+}
