@@ -13,4 +13,9 @@ COPY . .
 
 EXPOSE 8000
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Applies pending Alembic migrations (idempotent - a no-op once the DB is
+# already at head) before serving, so a fresh Postgres gets its `public`
+# schema (Tenant/TenantUser) created automatically on first deploy. Binds
+# to $PORT when the platform provides one (e.g. Render), else 8000 for
+# docker-compose/local use.
+CMD alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}
