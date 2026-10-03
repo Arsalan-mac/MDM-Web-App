@@ -14,6 +14,7 @@ import {
   listAvailableChecks,
   listCustomChecks,
   listFindings,
+  listMappings,
   listRelations,
   listRuleTypes,
   runChecks,
@@ -24,7 +25,9 @@ import {
   type CustomCheckRuleType,
   type DatasetDetail,
   type DatasetRelation,
+  type Mapping,
 } from "@/lib/api";
+import { classifyDataset } from "@/lib/scorecard";
 import {
   Alert,
   Badge,
@@ -483,6 +486,7 @@ export default function DatasetDetailPage() {
   const [dataset, setDataset] = useState<DatasetDetail | null>(null);
   const [checks, setChecks] = useState<CheckDefinition[]>([]);
   const [findings, setFindings] = useState<CheckFinding[]>([]);
+  const [mappings, setMappings] = useState<Mapping[]>([]);
   const [selectedChecks, setSelectedChecks] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -492,14 +496,16 @@ export default function DatasetDetailPage() {
     const token = await getToken();
     if (!token) return;
     try {
-      const [ds, checkList, findingList] = await Promise.all([
+      const [ds, checkList, findingList, mappingList] = await Promise.all([
         getDataset(token, projectId, datasetId),
         listAvailableChecks(token, projectId, datasetId),
         listFindings(token, projectId, datasetId),
+        listMappings(token, projectId),
       ]);
       setDataset(ds);
       setChecks(checkList);
       setFindings(findingList);
+      setMappings(mappingList);
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load dataset.");
@@ -585,6 +591,44 @@ export default function DatasetDetailPage() {
           </p>
         </div>
       </div>
+
+      {(() => {
+        const sc = classifyDataset(dataset, checks, findings, mappings);
+        return (
+          <Card>
+            <CardHeader>
+              <CardTitle>Readiness classification</CardTitle>
+              <CardDescription>
+                Every field this domain cares about, sorted into what&apos;s actually blocking it.
+              </CardDescription>
+            </CardHeader>
+            <CardBody className="grid grid-cols-1 gap-4 sm:grid-cols-4">
+              <div>
+                <p className="text-xs font-medium uppercase tracking-wide text-ink-500">Needs Mapping</p>
+                <p className="mt-1 text-2xl font-semibold text-amber-600">{sc.mappingNeeded}</p>
+                <p className="mt-1 text-xs text-ink-500">roles with no source column yet</p>
+              </div>
+              <div>
+                <p className="text-xs font-medium uppercase tracking-wide text-ink-500">Needs Cleansing</p>
+                <p className="mt-1 text-2xl font-semibold text-red-600">{sc.totalOpenFindings}</p>
+                <p className="mt-1 text-xs text-ink-500">open findings on mapped fields</p>
+              </div>
+              <div>
+                <p className="text-xs font-medium uppercase tracking-wide text-ink-500">Needs Transformation</p>
+                <p className="mt-1 text-2xl font-semibold text-brand-700">{sc.transformationFields}</p>
+                <p className="mt-1 text-xs text-ink-500">derived fields defined in Mapping Studio</p>
+              </div>
+              <div>
+                <p className="text-xs font-medium uppercase tracking-wide text-ink-500">Readiness</p>
+                <p className="mt-1 text-2xl font-semibold text-emerald-600">{sc.readinessPct}%</p>
+                <p className="mt-1 text-xs text-ink-500">
+                  {sc.ok} of {sc.roles.length} roles clean
+                </p>
+              </div>
+            </CardBody>
+          </Card>
+        );
+      })()}
 
       <Card>
         <CardHeader>

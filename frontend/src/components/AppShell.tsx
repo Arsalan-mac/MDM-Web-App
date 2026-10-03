@@ -3,12 +3,18 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { OrganizationSwitcher, UserButton } from "@clerk/nextjs";
-import { LayoutGrid, Settings, Sparkles, Users } from "lucide-react";
+import { BarChart3, LayoutGrid, Settings, Sparkles, Users } from "lucide-react";
 import clsx from "clsx";
 import { type ReactNode } from "react";
 
 const NAV_ITEMS = [
   { href: "/dashboard", label: "Projects", icon: LayoutGrid, match: (p: string) => p === "/dashboard" },
+  {
+    href: "/dashboard/leadership",
+    label: "Leadership Rollup",
+    icon: BarChart3,
+    match: (p: string) => p.startsWith("/dashboard/leadership"),
+  },
   { href: "/dashboard/team", label: "Team", icon: Users, match: (p: string) => p.startsWith("/dashboard/team") },
   {
     href: "/dashboard/settings",

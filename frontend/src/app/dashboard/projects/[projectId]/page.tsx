@@ -4,7 +4,7 @@ import { useAuth } from "@clerk/nextjs";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
-import { ArrowLeft, ArrowRight, Database, MessageCircle } from "lucide-react";
+import { ArrowLeft, ArrowRight, BarChart3, Database, MessageCircle } from "lucide-react";
 import { getProject, type Project } from "@/lib/api";
 import { Alert, Badge, Card, CardBody, ProgressBar } from "@/components/ui";
 import { PipelineStepper } from "@/components/PipelineStepper";
@@ -48,13 +48,22 @@ export default function ProjectDetailPage() {
         <>
           <div className="flex flex-wrap items-start justify-between gap-4">
             <h1 className="text-2xl font-semibold text-ink-900">{project.name}</h1>
-            <Link
-              href={`/dashboard/projects/${projectId}/chat`}
-              className="inline-flex items-center gap-2 rounded-lg border border-ink-300 bg-white px-4 py-2 text-sm font-medium text-ink-800 hover:bg-ink-50"
-            >
-              <MessageCircle className="h-4 w-4 text-brand-600" />
-              Talk to your data
-            </Link>
+            <div className="flex items-center gap-2">
+              <Link
+                href={`/dashboard/projects/${projectId}/scorecard`}
+                className="inline-flex items-center gap-2 rounded-lg border border-ink-300 bg-white px-4 py-2 text-sm font-medium text-ink-800 hover:bg-ink-50"
+              >
+                <BarChart3 className="h-4 w-4 text-brand-600" />
+                Scorecard
+              </Link>
+              <Link
+                href={`/dashboard/projects/${projectId}/chat`}
+                className="inline-flex items-center gap-2 rounded-lg border border-ink-300 bg-white px-4 py-2 text-sm font-medium text-ink-800 hover:bg-ink-50"
+              >
+                <MessageCircle className="h-4 w-4 text-brand-600" />
+                Talk to your data
+              </Link>
+            </div>
           </div>
 
           <section className="space-y-3">
